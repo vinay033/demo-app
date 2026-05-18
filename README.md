@@ -2,6 +2,14 @@
 
 This project was generated with [Angular CLI](https://github.com/angular/angular-cli) version 14.0.5.
 
+## Project docs
+
+| Document | Description |
+|---|---|
+| [Architecture](./docs/architecture.md) | Mermaid diagrams: dependency flow, data flow, build/env config |
+| [Onboarding walk](./docs/onboarding-walk.md) | Step-by-step Copilot Chat prompts for new developers |
+| [Contributing](./CONTRIBUTING.md) | Branching strategy, PR expectations, Copilot guidance |
+
 ## Development server
 
 Run `ng serve` for a dev server. Navigate to `http://localhost:4200/`. The application will automatically reload if you change any of the source files.
@@ -81,7 +89,7 @@ The build will fail if coverage drops below the configured thresholds.
 
 ### Validating architecture diagrams
 
-The `docs/architecture.md` Mermaid diagrams are validated separately:
+The [`docs/architecture.md`](./docs/architecture.md) Mermaid diagrams are validated by [`scripts/validate-diagrams.mjs`](./scripts/validate-diagrams.mjs):
 
 ```bash
 npm run validate:docs
@@ -94,3 +102,5 @@ Run `ng e2e` to execute the end-to-end tests via a platform of your choice. To u
 ## Further help
 
 To get more help on the Angular CLI use `ng help` or go check out the [Angular CLI Overview and Command Reference](https://angular.io/cli) page.
+
+For contributing guidelines, branching strategy, and how to use GitHub Copilot with this repo, see [CONTRIBUTING.md](./CONTRIBUTING.md).
