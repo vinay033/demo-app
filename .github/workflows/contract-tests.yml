@@ -1,0 +1,105 @@
+name: Contract Tests
+
+on:
+  push:
+    paths:
+      - "src/**"
+      - "projects/**"
+      - "angular.json"
+      - "karma.conf.js"
+      - "scripts/karma.base.js"
+      - "tsconfig*.json"
+      - ".github/workflows/contract-tests.yml"
+  pull_request:
+    paths:
+      - "src/**"
+      - "projects/**"
+      - "angular.json"
+      - "karma.conf.js"
+      - "scripts/karma.base.js"
+      - "tsconfig*.json"
+      - ".github/workflows/contract-tests.yml"
+
+jobs:
+  contract-tests:
+    name: Contract & unit tests (${{ matrix.project }})
+    runs-on: ubuntu-latest
+
+    strategy:
+      fail-fast: false   # run all projects even if one fails
+      matrix:
+        project:
+          - name: demo-app
+            ng_target: ""          # default project, no --project flag needed
+          - name: sub-app1
+            ng_target: "sub-app1"
+          - name: sub-app2
+            ng_target: "sub-app2"
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: "npm"
+
+      - name: Install dependencies
+        run: npm ci --legacy-peer-deps
+
+      - name: Install Chrome system libraries (required by karma-chrome-launcher)
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends \
+            google-chrome-stable \
+            libnss3 libatk1.0-0 libatk-bridge2.0-0 libcups2 \
+            libdrm2 libxkbcommon0 libxcomposite1 libxdamage1 \
+            libxfixes3 libxrandr2 libgbm1 libasound2 \
+            libxshmfence1 libglu1-mesa || \
+          sudo apt-get install -y --no-install-recommends \
+            chromium-browser \
+            libnss3 libatk1.0-0 libatk-bridge2.0-0 libcups2 \
+            libdrm2 libxkbcommon0 libxcomposite1 libxdamage1 \
+            libxfixes3 libxrandr2 libgbm1 libasound2
+
+      - name: TypeScript type-check (${{ matrix.project.name }})
+        run: |
+          if [ "${{ matrix.project.name }}" = "demo-app" ]; then
+            npx tsc --noEmit -p tsconfig.app.json
+          else
+            npx tsc --noEmit -p projects/${{ matrix.project.name }}/tsconfig.app.json
+          fi
+
+      - name: Run tests with coverage (${{ matrix.project.name }})
+        run: |
+          if [ -z "${{ matrix.project.ng_target }}" ]; then
+            npx ng test --no-watch --browsers=ChromeHeadlessCI
+          else
+            npx ng test ${{ matrix.project.ng_target }} --no-watch --browsers=ChromeHeadlessCI
+          fi
+        env:
+          CHROME_BIN: /usr/bin/google-chrome-stable
+
+      - name: Upload coverage report (${{ matrix.project.name }})
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: coverage-${{ matrix.project.name }}
+          path: coverage/${{ matrix.project.name }}/
+          retention-days: 14
+
+  contract-tests-summary:
+    name: All contract tests passed
+    runs-on: ubuntu-latest
+    needs: contract-tests
+    if: always()
+    steps:
+      - name: Check matrix result
+        run: |
+          if [ "${{ needs.contract-tests.result }}" != "success" ]; then
+            echo "One or more contract test jobs failed."
+            exit 1
+          fi
+          echo "All contract test jobs passed."
