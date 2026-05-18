@@ -18,6 +18,75 @@ Run `ng build` to build the project. The build artifacts will be stored in the `
 
 Run `ng test` to execute the unit tests via [Karma](https://karma-runner.github.io).
 
+## Running coverage locally
+
+This workspace has three independently testable projects. Coverage is enabled by default (`codeCoverage: true` in `angular.json`) and reports are written to `coverage/` after each run.
+
+### Quick start — all projects, headless
+
+```bash
+# demo-app (host shell)
+ng test --no-watch --browsers=ChromeHeadlessCI
+
+# sub-app1 (remote)
+ng test sub-app1 --no-watch --browsers=ChromeHeadlessCI
+
+# sub-app2 (remote)
+ng test sub-app2 --no-watch --browsers=ChromeHeadlessCI
+```
+
+### Interactive mode (watch + browser UI)
+
+```bash
+ng test              # demo-app — opens Chrome, watches for file changes
+ng test sub-app1     # sub-app1
+ng test sub-app2     # sub-app2
+```
+
+### Coverage output locations
+
+| Project | HTML report | lcov (for CI tools) |
+|---|---|---|
+| `demo-app` | `coverage/demo-app/index.html` | `coverage/demo-app/lcov.info` |
+| `sub-app1` | `coverage/sub-app1/index.html` | `coverage/sub-app1/lcov.info` |
+| `sub-app2` | `coverage/sub-app2/index.html` | `coverage/sub-app2/lcov.info` |
+
+Open the HTML report in a browser for a line-by-line breakdown:
+
+```bash
+open coverage/demo-app/index.html   # macOS
+xdg-open coverage/demo-app/index.html  # Linux
+```
+
+### Enforcing a coverage threshold
+
+Pass `--code-coverage-exclude` and Angular CLI flags, or add `thresholds` directly in `karma.conf.js`:
+
+```js
+// karma.conf.js
+coverageReporter: {
+  ...
+  check: {
+    global: {
+      statements: 80,
+      branches: 80,
+      functions: 80,
+      lines: 80
+    }
+  }
+}
+```
+
+The build will fail if coverage drops below the configured thresholds.
+
+### Validating architecture diagrams
+
+The `docs/architecture.md` Mermaid diagrams are validated separately:
+
+```bash
+npm run validate:docs
+```
+
 ## Running end-to-end tests
 
 Run `ng e2e` to execute the end-to-end tests via a platform of your choice. To use this command, you need to first add a package that implements end-to-end testing capabilities.
