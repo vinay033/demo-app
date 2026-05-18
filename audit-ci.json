@@ -1,0 +1,15 @@
+{
+  "$schema": "https://github.com/IBM/audit-ci/raw/main/docs/schema.json",
+
+  "moderate": false,
+  "high":     false,
+  "critical": true,
+
+  "allowlist": [
+    "GHSA-67hx-6x53-jw92"
+  ],
+
+  "_allowlist_rationale": {
+    "GHSA-67hx-6x53-jw92": "@babel/traverse <7.23.2 — arbitrary code execution when compiling malicious input. Transitive dependency of @angular-devkit/build-angular@14. Only triggered if an attacker controls the source code being compiled. Remediation: upgrade to Angular 15+ (ng update). Tracked in docs/architecture.md Known Issues."
+  }
+}

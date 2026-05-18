@@ -1,0 +1,70 @@
+name: Dependency Vulnerability Scan
+
+on:
+  push:
+    paths:
+      - 'package.json'
+      - 'package-lock.json'
+  pull_request:
+    paths:
+      - 'package.json'
+      - 'package-lock.json'
+  schedule:
+    # Run every Monday at 06:00 UTC so new CVEs are caught even without a code push
+    - cron: '0 6 * * 1'
+  workflow_dispatch:
+
+jobs:
+  audit:
+    name: npm audit
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci --legacy-peer-deps
+
+      # ── Full report (informational, never fails the job) ──────────────────
+      # Captures the complete audit output including high/moderate/low findings
+      # that are pre-existing Angular 14 debt. Uploaded as an artifact so
+      # reviewers can inspect without scrolling raw logs.
+      - name: Generate full audit report
+        run: npm audit --json > audit-report.json || true
+
+      - name: Upload audit report artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: npm-audit-report
+          path: audit-report.json
+          retention-days: 30
+
+      # ── Summary table printed to the Actions job log ──────────────────────
+      - name: Print vulnerability summary
+        run: |
+          echo "### Vulnerability summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          node - << 'JS'
+            const fs = require('fs');
+            const report = JSON.parse(fs.readFileSync('audit-report.json', 'utf8'));
+            const v = report.metadata?.vulnerabilities ?? {};
+            const rows = ['critical','high','moderate','low','info']
+              .map(s => `| ${s} | ${v[s] ?? 0} |`).join('\n');
+            const summary =
+              `| Severity | Count |\n|---|---|\n${rows}\n\n` +
+              `**Total packages scanned:** ${report.metadata?.totalDependencies ?? 'n/a'}`;
+            console.log(summary);
+            fs.appendFileSync(process.env.GITHUB_STEP_SUMMARY, summary + '\n');
+          JS
+
+      # ── Hard gate: fails only on critical vulns NOT in the allowlist ─────
+      # GHSA-67hx-6x53-jw92 (@babel/traverse) is allowlisted — pre-existing
+      # Angular 14 transitive dep. See audit-ci.json for full rationale.
+      - name: Fail on unlisted critical vulnerabilities
+        run: npx audit-ci --config audit-ci.json

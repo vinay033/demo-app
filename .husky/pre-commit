@@ -1,0 +1,24 @@
+#!/bin/sh
+# Dependency vulnerability scan.
+#
+# Uses audit-ci with audit-ci.json:
+#   - Fails on any CRITICAL vulnerability NOT in the allowlist
+#   - High/moderate/low are informational (pre-existing Angular 14 debt)
+#   - One known critical (GHSA-67hx-6x53-jw92 @babel/traverse) is allowlisted
+#     until the workspace is upgraded to Angular 15+
+#
+# Emergency bypass: git commit --no-verify
+
+echo "🔍  Scanning dependencies for vulnerabilities..."
+npx audit-ci --config audit-ci.json
+EXIT=$?
+if [ $EXIT -ne 0 ]; then
+  echo ""
+  echo "❌  New critical vulnerability detected — commit blocked."
+  echo "    Run 'npm audit' for details."
+  echo "    If this is a known/accepted risk, add the GHSA ID to audit-ci.json"
+  echo "    with a written rationale, then commit both files together."
+  echo "    Emergency bypass: git commit --no-verify"
+  exit 1
+fi
+echo "✅  No unexpected critical vulnerabilities."
