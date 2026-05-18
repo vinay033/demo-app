@@ -11,8 +11,9 @@ Thank you for contributing! This document covers everything you need to get chan
 3. [Commit Message Convention](#commit-message-convention)
 4. [Pull Request Expectations](#pull-request-expectations)
 5. [Running Tests and Coverage Locally](#running-tests-and-coverage-locally)
-6. [Working with GitHub Copilot](#working-with-github-copilot)
-7. [Project Structure Quick Reference](#project-structure-quick-reference)
+6. [Dependency Upgrade Policy](#dependency-upgrade-policy)
+7. [Working with GitHub Copilot](#working-with-github-copilot)
+8. [Project Structure Quick Reference](#project-structure-quick-reference)
 
 ---
 
@@ -207,6 +208,91 @@ Open the repo in a terminal and launch the Copilot CLI. Copilot will read the wo
 - Commit secrets or credentials to source control.
 - Modify files outside the repository root without explicit instruction.
 - Make changes outside the scope of your request without flagging them.
+
+---
+
+## Dependency Upgrade Policy
+
+### Selecting an upgrade
+
+Run `npm outdated` to list all stale packages:
+
+```bash
+npm outdated
+```
+
+The output columns mean:
+
+| Column | Meaning |
+|---|---|
+| `Current` | What is installed (`node_modules/`) |
+| `Wanted` | Highest version satisfying the `package.json` semver range |
+| `Latest` | Absolute latest on npm (may be a major bump) |
+
+**Only apply upgrades in this priority order:**
+
+1. **Patch** (`x.y.Z`) — apply freely; no API surface changes by semver contract.
+2. **Minor** (`x.Y.z`) — apply one package at a time; run the full test suite before committing.
+3. **Major** (`X.y.z`) — treat as a migration: open a dedicated branch, read the changelog, update peer deps, verify Angular compatibility.
+
+Angular packages (`@angular/*`, `@angular-devkit/*`, `typescript`, `zone.js`) **must be upgraded together** using the Angular update tool:
+
+```bash
+ng update @angular/core @angular/cli
+```
+
+Never bump Angular packages individually — the peer dependency graph is tightly coupled.
+
+---
+
+### Upgrade procedure (minor / patch)
+
+```bash
+# 1. Check what has changed
+npm outdated
+
+# 2. Install the specific version
+npm install <package>@<new-version> --save-dev --legacy-peer-deps
+
+# 3. Verify the installed version
+node -e "console.log(require('./node_modules/<package>/package.json').version)"
+
+# 4. Run the full test suite
+npm run test:ci
+
+# 5. Commit package.json + package-lock.json together
+git add package.json package-lock.json
+git commit -m "chore(deps): upgrade <package> <old> → <new>
+
+<one-line rationale>
+
+All N tests pass after upgrade."
+```
+
+---
+
+### Rollback
+
+If a test failure is introduced by an upgrade, pin back to the previous version:
+
+```bash
+npm install <package>@<previous-version> --save-dev --legacy-peer-deps
+npm run test:ci   # confirm green before committing the rollback
+git add package.json package-lock.json
+git commit -m "revert(deps): pin <package> back to <previous-version>
+
+Reason: <describe what broke>"
+```
+
+---
+
+### Upgrade log
+
+Record each applied upgrade here so reviewers have a single reference.
+
+| Date | Package | From | To | Type | Tests | Notes |
+|---|---|---|---|---|---|---|
+| 2026-05-18 | `karma-chrome-launcher` | 3.1.1 | 3.2.0 | minor | 26/26 ✅ | Adds `--headless=new` flag support; no code changes required |
 
 ---
 
