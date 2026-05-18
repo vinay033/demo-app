@@ -5,11 +5,14 @@
  * the diagram parses without errors. Exits non-zero on any failure.
  */
 
-import { execSync } from "child_process";
+import { exec } from "child_process";
 import { readFileSync, writeFileSync, mkdirSync, rmSync } from "fs";
 import { join, dirname } from "path";
 import { fileURLToPath } from "url";
+import { promisify } from "util";
 import { tmpdir } from "os";
+
+const execAsync = promisify(exec);
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = join(__dirname, "..");
@@ -44,31 +47,40 @@ if (diagrams.length === 0) {
 
 console.log(`🔍  Found ${diagrams.length} Mermaid diagram(s) in docs/architecture.md\n`);
 
+// Render all diagrams in parallel — each has its own unique file paths so
+// there is no collision. The puppeteer config is shared but read-only.
+// Promise.all preserves insertion order, so result[i] === diagram i+1.
+const results = await Promise.all(
+  diagrams.map(async (diagram, i) => {
+    const label = `Diagram ${i + 1}`;
+    const inputFile = join(TMP, `diagram-${i + 1}.mmd`);
+    const outputFile = join(TMP, `diagram-${i + 1}.svg`);
+    writeFileSync(inputFile, diagram, "utf8");
+    try {
+      await execAsync(
+        `"${MMDC}" --input "${inputFile}" --output "${outputFile}" --puppeteerConfigFile "${puppeteerConfig}"`
+      );
+      return { label, ok: true };
+    } catch (err) {
+      const stderr = err.stderr?.toString().trim() || err.message;
+      return { label, ok: false, stderr };
+    }
+  })
+);
+
+// Clean up temp files before printing so exit() doesn't race the FS
+rmSync(TMP, { recursive: true, force: true });
+
 let failed = 0;
-
-for (let i = 0; i < diagrams.length; i++) {
-  const label = `Diagram ${i + 1}`;
-  const inputFile = join(TMP, `diagram-${i + 1}.mmd`);
-  const outputFile = join(TMP, `diagram-${i + 1}.svg`);
-
-  writeFileSync(inputFile, diagrams[i], "utf8");
-
-  try {
-    execSync(
-      `"${MMDC}" --input "${inputFile}" --output "${outputFile}" --puppeteerConfigFile "${puppeteerConfig}"`,
-      { stdio: "pipe" }
-    );
-    console.log(`  ✅  ${label} — OK`);
-  } catch (err) {
-    const stderr = err.stderr?.toString().trim() || err.message;
-    console.error(`  ❌  ${label} — FAILED`);
-    console.error(`      ${stderr.split("\n").join("\n      ")}`);
+for (const r of results) {
+  if (r.ok) {
+    console.log(`  ✅  ${r.label} — OK`);
+  } else {
+    console.error(`  ❌  ${r.label} — FAILED`);
+    console.error(`      ${r.stderr.split("\n").join("\n      ")}`);
     failed++;
   }
 }
-
-// Clean up temp files
-rmSync(TMP, { recursive: true, force: true });
 
 console.log();
 if (failed > 0) {
