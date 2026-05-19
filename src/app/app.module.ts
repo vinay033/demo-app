@@ -5,6 +5,7 @@ import { AppRoutingModule } from './app-routing.module';
 import { AppComponent } from './app.component';
 import { TelemetryErrorHandler } from './telemetry/telemetry-error-handler';
 import { RouterTelemetryService } from './telemetry/router-telemetry.service';
+import { WebVitalsService } from './telemetry/web-vitals.service';
 
 @NgModule({
   declarations: [
@@ -26,7 +27,11 @@ import { RouterTelemetryService } from './telemetry/router-telemetry.service';
   ]
 })
 export class AppModule {
-  // Inject RouterTelemetryService here so it starts listening to Router events
-  // as soon as the module is instantiated — before any navigation occurs.
-  constructor(private readonly _routerTelemetry: RouterTelemetryService) {}
+  // Inject services here so they start collecting before any navigation or
+  // user interaction occurs — RouterTelemetryService must see NavigationStart,
+  // and WebVitalsService must register observers before the page loads.
+  constructor(
+    private readonly _routerTelemetry: RouterTelemetryService,
+    private readonly _webVitals: WebVitalsService,
+  ) {}
 }
