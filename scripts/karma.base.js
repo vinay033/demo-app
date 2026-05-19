@@ -43,7 +43,8 @@ module.exports = function makeKarmaConfig({ coverageDir }) {
         reporters: [
           { type: 'html' },
           { type: 'text-summary' },
-          { type: 'lcov' }
+          { type: 'lcov' },
+          { type: 'json-summary', file: 'coverage-summary.json' }
         ]
       },
       reporters: ['progress', 'kjhtml'],

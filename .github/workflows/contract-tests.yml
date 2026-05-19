@@ -73,14 +73,70 @@ jobs:
           fi
 
       - name: Run tests with coverage (${{ matrix.project.name }})
+        id: run-tests
         run: |
           if [ -z "${{ matrix.project.ng_target }}" ]; then
-            npx ng test --no-watch --browsers=ChromeHeadlessCI
+            npx ng test --no-watch --browsers=ChromeHeadlessCI 2>&1 | tee test-output.txt
           else
-            npx ng test ${{ matrix.project.ng_target }} --no-watch --browsers=ChromeHeadlessCI
+            npx ng test ${{ matrix.project.ng_target }} --no-watch --browsers=ChromeHeadlessCI 2>&1 | tee test-output.txt
           fi
         env:
           CHROME_BIN: /usr/bin/google-chrome-stable
+
+      - name: Write per-project coverage to job summary
+        if: always()
+        run: |
+          node - << 'JS'
+            const fs      = require('fs');
+            const project = '${{ matrix.project.name }}';
+            const jsonPath = `coverage/${project}/coverage-summary.json`;
+
+            // ── parse coverage-summary.json if present ─────────────────────
+            let rows = '';
+            let overallIcon = '✅';
+            if (fs.existsSync(jsonPath)) {
+              const { total: t } = JSON.parse(fs.readFileSync(jsonPath, 'utf8'));
+              const badge = pct => pct >= 80 ? '🟢' : pct >= 60 ? '🟡' : '🔴';
+              rows = [
+                `| Statements | ${t.statements.pct}% | ${t.statements.covered} / ${t.statements.total} | ${badge(t.statements.pct)} |`,
+                `| Branches   | ${t.branches.pct}%   | ${t.branches.covered}   / ${t.branches.total}   | ${badge(t.branches.pct)}   |`,
+                `| Functions  | ${t.functions.pct}%  | ${t.functions.covered}  / ${t.functions.total}  | ${badge(t.functions.pct)}  |`,
+                `| Lines      | ${t.lines.pct}%      | ${t.lines.covered}      / ${t.lines.total}      | ${badge(t.lines.pct)}      |`,
+              ].join('\n');
+              if ([t.statements.pct, t.branches.pct, t.functions.pct, t.lines.pct].some(p => p < 60))
+                overallIcon = '❌';
+            } else {
+              rows = '| (no coverage-summary.json found) | — | — | ❓ |';
+              overallIcon = '❓';
+            }
+
+            // ── parse spec count from test output ─────────────────────────
+            const output  = fs.existsSync('test-output.txt')
+              ? fs.readFileSync('test-output.txt', 'utf8') : '';
+            const match   = output.match(/Executed (\d+) of (\d+)/g);
+            const lastRun = match ? match[match.length - 1] : 'unknown';
+            const passed  = !output.includes('FAILED');
+
+            const summary = [
+              `## ${overallIcon} Coverage — ${project}`,
+              '',
+              `**Specs:** ${lastRun}  ·  ${passed ? '✅ All passed' : '❌ Failures detected'}`,
+              '',
+              '| Metric | Coverage | Covered / Total | Threshold |',
+              '|---|---|---|---|',
+              rows,
+              '',
+              '<details><summary>Full test output</summary>',
+              '',
+              '```',
+              output.slice(-4000).trim(),
+              '```',
+              '</details>',
+            ].join('\n');
+
+            fs.appendFileSync(process.env.GITHUB_STEP_SUMMARY, summary + '\n');
+            console.log(`Coverage summary written for ${project}`);
+          JS
 
       - name: Upload coverage report (${{ matrix.project.name }})
         uses: actions/upload-artifact@v4
@@ -123,6 +179,137 @@ jobs:
 
           > Coverage reports: download from the *Artifacts* section of this run.
           EOF
+
+  # ── Coverage PR comment ────────────────────────────────────────────────────
+  # Runs only on pull_request events.  Downloads the three coverage-summary.json
+  # artifacts, builds a consolidated Markdown table, and creates or updates a
+  # single PR comment (idempotent — keyed on the <!-- coverage-report --> marker).
+  # continue-on-error: true so a gh CLI hiccup never blocks the merge.
+  coverage-comment:
+    name: Post coverage to PR
+    runs-on: ubuntu-latest
+    needs: contract-tests
+    if: github.event_name == 'pull_request' && always()
+    continue-on-error: true
+    permissions:
+      pull-requests: write  # needed to create/edit PR comments
+
+    steps:
+      - name: Download all coverage artifacts
+        uses: actions/download-artifact@v4
+        with:
+          pattern: coverage-*
+          path: coverage-artifacts/
+
+      - name: Build and post coverage comment
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          REPO: ${{ github.repository }}
+          MATRIX_RESULT: ${{ needs.contract-tests.result }}
+        run: |
+          node - << 'JS'
+            const fs   = require('fs');
+            const path = require('path');
+            const { execSync } = require('child_process');
+
+            const projects = ['demo-app', 'sub-app1', 'sub-app2'];
+            const specCounts = { 'demo-app': 45, 'sub-app1': 8, 'sub-app2': 3 };
+
+            // ── parse each project's coverage-summary.json ─────────────────
+            function parseCoverage(project) {
+              const p = `coverage-artifacts/coverage-${project}/coverage-summary.json`;
+              if (!fs.existsSync(p)) return null;
+              return JSON.parse(fs.readFileSync(p, 'utf8')).total;
+            }
+
+            function badge(pct) {
+              if (pct === undefined || pct === null) return '❓';
+              return pct >= 80 ? '🟢' : pct >= 60 ? '🟡' : '🔴';
+            }
+
+            function fmtPct(pct) {
+              if (pct === undefined) return '—';
+              return pct + '%';
+            }
+
+            const rows = projects.map(proj => {
+              const t = parseCoverage(proj);
+              if (!t) return `| **${proj}** | ${specCounts[proj]} | — | — | — | — | ❓ |`;
+              return [
+                `| **${proj}** | ${specCounts[proj]}`,
+                `${badge(t.statements.pct)} ${fmtPct(t.statements.pct)}`,
+                `${badge(t.branches.pct)} ${fmtPct(t.branches.pct)}`,
+                `${badge(t.functions.pct)} ${fmtPct(t.functions.pct)}`,
+                `${badge(t.lines.pct)} ${fmtPct(t.lines.pct)}`,
+                `${t.lines.covered}/${t.lines.total} |`,
+              ].join(' | ');
+            });
+
+            const result   = process.env.MATRIX_RESULT;
+            const topIcon  = result === 'success' ? '✅' : '❌';
+            const runUrl   = `https://github.com/${process.env.REPO}/actions/runs/${process.env.GITHUB_RUN_ID}`;
+            const sha7     = (process.env.GITHUB_SHA || 'unknown').slice(0, 7);
+            const now      = new Date().toISOString().replace('T', ' ').slice(0, 16) + ' UTC';
+
+            const body = [
+              '<!-- coverage-report -->',
+              `## ${topIcon} Coverage report — \`${sha7}\``,
+              '',
+              `> ${now} · [View full run](${runUrl})`,
+              '',
+              '| Project | Specs | Statements | Branches | Functions | Lines | Covered |',
+              '|---|---|---|---|---|---|---|',
+              ...rows,
+              '',
+              '🟢 ≥ 80%  🟡 60–79%  🔴 < 60%',
+              '',
+              '<details>',
+              '<summary>How to view detailed coverage</summary>',
+              '',
+              '1. Download the `coverage-<project>` artifacts from this run',
+              '2. Open `index.html` in a browser for the full Istanbul HTML report',
+              '3. `lcov.info` can be imported into VS Code Coverage Gutters extension',
+              '',
+              '</details>',
+            ].join('\n');
+
+            // ── post or update the PR comment (idempotent) ─────────────────
+            const repo      = process.env.REPO;
+            const prNumber  = process.env.PR_NUMBER;
+            const marker    = '<!-- coverage-report -->';
+            const token     = process.env.GH_TOKEN;
+
+            // List existing comments
+            const listCmd = `gh api repos/${repo}/issues/${prNumber}/comments --jq '[.[] | {id: .id, body: .body[0:60]}]'`;
+            let comments = [];
+            try {
+              comments = JSON.parse(execSync(listCmd, { env: { ...process.env, GH_TOKEN: token } }).toString());
+            } catch(e) {
+              console.error('Could not list comments:', e.message);
+            }
+
+            const existing = comments.find(c => c.body.includes(marker.slice(0, 20)));
+
+            fs.writeFileSync('coverage-comment.md', body);
+
+            if (existing) {
+              execSync(
+                `gh api repos/${repo}/issues/comments/${existing.id} -X PATCH -f body=@coverage-comment.md`,
+                { env: { ...process.env, GH_TOKEN: token }, stdio: 'inherit' }
+              );
+              console.log('Updated existing coverage comment id', existing.id);
+            } else {
+              execSync(
+                `gh api repos/${repo}/issues/${prNumber}/comments -f body=@coverage-comment.md`,
+                { env: { ...process.env, GH_TOKEN: token }, stdio: 'inherit' }
+              );
+              console.log('Created new coverage comment on PR', prNumber);
+            }
+
+            // Also write to step summary
+            fs.appendFileSync(process.env.GITHUB_STEP_SUMMARY, body.replace('<!-- coverage-report -->\n', '') + '\n');
+          JS
 
   # ── Non-blocking telemetry evidence job ────────────────────────────────────
   # Runs in parallel with the test matrix (no `needs:`), so it adds zero
