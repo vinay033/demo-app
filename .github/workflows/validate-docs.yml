@@ -46,6 +46,7 @@ jobs:
 
       - name: Post diagram validation summary
         if: always()
+        continue-on-error: true   # advisory — summary failure must not fail diagram validation
         run: |
           node - << 'JS'
             const fs  = require('fs');

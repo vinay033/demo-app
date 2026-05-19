@@ -47,6 +47,7 @@ jobs:
 
       # ── Summary table printed to the Actions job log ──────────────────────
       - name: Print vulnerability summary
+        continue-on-error: true   # advisory — summary failure must not block the audit gate
         run: |
           echo "### Vulnerability summary" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
