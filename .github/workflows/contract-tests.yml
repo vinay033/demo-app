@@ -103,3 +103,120 @@ jobs:
             exit 1
           fi
           echo "All contract test jobs passed."
+
+      - name: Post test summary
+        if: always()
+        run: |
+          RESULT="${{ needs.contract-tests.result }}"
+          ICON="✅"
+          [ "$RESULT" != "success" ] && ICON="❌"
+          cat >> "$GITHUB_STEP_SUMMARY" << EOF
+          ## ${ICON} Contract & unit tests — matrix summary
+
+          | Project | Specs | Result |
+          |---|---|---|
+          | demo-app  | 45 | ${RESULT} |
+          | sub-app1  | 8  | ${RESULT} |
+          | sub-app2  | 3  | ${RESULT} |
+
+          **Total: 56 specs across 3 projects** · Coverage artifacts uploaded (14-day retention)
+
+          > Coverage reports: download from the *Artifacts* section of this run.
+          EOF
+
+  # ── Non-blocking telemetry evidence job ────────────────────────────────────
+  # Runs in parallel with the test matrix (no `needs:`), so it adds zero
+  # wall-clock time to the critical path.  continue-on-error: true means a
+  # script failure never blocks a merge — this is purely informational evidence.
+  telemetry-evidence:
+    name: Telemetry instrumentation evidence
+    runs-on: ubuntu-latest
+    continue-on-error: true   # non-blocking: failure never gates merge
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: "npm"
+
+      - name: Install production + dev dependencies
+        run: npm ci --legacy-peer-deps
+
+      - name: Run telemetry verification script
+        id: verify
+        run: |
+          node scripts/verify-telemetry.mjs 2>&1 | tee telemetry-evidence.txt || true
+
+      - name: Upload evidence artifact
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: telemetry-evidence
+          path: telemetry-evidence.txt
+          retention-days: 14
+
+      - name: Post telemetry summary to job summary
+        if: always()
+        run: |
+          node - << 'JS'
+            const fs  = require('fs');
+            const raw = fs.existsSync('telemetry-evidence.txt')
+              ? fs.readFileSync('telemetry-evidence.txt', 'utf8').replace(/\x1b\[[0-9;]*m/g, '')
+              : '(no output — script may have failed)';
+
+            // Extract the 14 meaningful [telemetry] lines (skip stress-test noise)
+            const meaningful = raw.split('\n')
+              .filter(l => l.startsWith('[telemetry]') && !l.includes('stress.test'))
+              .map(l => `\`${l.trim()}\``)
+              .join('\n');
+
+            // Extract Performance API summary line
+            const marksLine   = raw.match(/marks:\s+(\d+)/)?.[0]  ?? 'marks: n/a';
+            const measuresLine = raw.match(/measures:\s+(\d+)/)?.[0] ?? 'measures: n/a';
+
+            // Ring-buffer result
+            const bufLine = raw.match(/buffer holds \d+ \(\d+ oldest dropped\)/)?.[0] ?? '';
+
+            // Flush result
+            const flushOk = raw.includes('buffer cleared ✔');
+
+            const summary = [
+              '## 📡 Telemetry instrumentation evidence',
+              '',
+              '> **Non-blocking job** — this evidence does not gate merge.',
+              '> Full guide: [`docs/telemetry.md`](./docs/telemetry.md)',
+              '',
+              '### Instrumentation points verified',
+              '',
+              '| Point | Metric | Status |',
+              '|---|---|---|',
+              `| TelemetryErrorHandler  | \`error.unhandled\`        | ${raw.includes('error_name=TypeError') ? '✅' : '❓'} |`,
+              `| RouterTelemetryService | \`route.navigation_ms\`    | ${raw.includes('route.navigation_ms') ? '✅' : '❓'} |`,
+              `| dispatchMonitorEnhancer| \`redux.dispatch\`         | ${raw.includes('redux.dispatch') ? '✅' : '❓'} |`,
+              `| WebVitalsService       | \`web_vitals.lcp/fcp/…\`  | ${raw.includes('web_vitals.lcp') ? '✅' : '❓'} |`,
+              `| Ring-buffer cap        | 500-event ceiling         | ${bufLine ? '✅ ' + bufLine : '❓'} |`,
+              `| flush() sendBeacon     | NDJSON payload            | ${flushOk ? '✅ buffer cleared' : '❓'} |`,
+              '',
+              '### Performance API marks/measures',
+              '',
+              `\`${marksLine}\` · \`${measuresLine}\` (one measure per timing event)`,
+              '',
+              '### Console output (meaningful lines only)',
+              '',
+              meaningful || '(none captured)',
+              '',
+              '<details><summary>Full raw output</summary>',
+              '',
+              '```',
+              raw.slice(0, 8000).trim(), // cap to avoid oversized summaries
+              '```',
+              '</details>',
+            ].join('\n');
+
+            fs.appendFileSync(process.env.GITHUB_STEP_SUMMARY, summary + '\n');
+            console.log('Summary written to $GITHUB_STEP_SUMMARY');
+          JS

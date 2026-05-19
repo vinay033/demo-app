@@ -39,4 +39,35 @@ jobs:
             libxfixes3 libxrandr2 libgbm1 libasound2
 
       - name: Validate Mermaid diagrams in docs/architecture.md
-        run: npm run validate:docs
+        id: validate
+        run: |
+          npm run validate:docs 2>&1 | tee validate-output.txt
+          echo "exit_code=${PIPESTATUS[0]}" >> "$GITHUB_OUTPUT"
+
+      - name: Post diagram validation summary
+        if: always()
+        run: |
+          node - << 'JS'
+            const fs  = require('fs');
+            const raw = fs.existsSync('validate-output.txt')
+              ? fs.readFileSync('validate-output.txt', 'utf8') : '(no output)';
+            const ok  = !raw.toLowerCase().includes('error') && raw.trim().length > 0;
+            const icon = ok ? '✅' : '❌';
+
+            const summary = [
+              `## ${icon} Mermaid diagram validation`,
+              '',
+              `| Result | Diagrams in docs/architecture.md |`,
+              `|---|---|`,
+              `| ${ok ? 'All rendered successfully' : 'One or more failed'} | 3 |`,
+              '',
+              '<details><summary>Raw validate:docs output</summary>',
+              '',
+              '```',
+              raw.trim(),
+              '```',
+              '</details>',
+            ].join('\n');
+
+            fs.appendFileSync(process.env.GITHUB_STEP_SUMMARY, summary + '\n');
+          JS
