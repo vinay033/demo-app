@@ -94,6 +94,16 @@
               "src/styles.css"
             ],
             "scripts": []
+          },
+          "configurations": {
+            "flags-off": {
+              "fileReplacements": [
+                {
+                  "replace": "src/environments/environment.ts",
+                  "with": "src/environments/environment.flags-off.ts"
+                }
+              ]
+            }
           }
         }
       }
@@ -189,6 +199,16 @@
               "projects/sub-app1/src/styles.css"
             ],
             "scripts": []
+          },
+          "configurations": {
+            "flags-off": {
+              "fileReplacements": [
+                {
+                  "replace": "src/environments/environment.ts",
+                  "with": "src/environments/environment.flags-off.ts"
+                }
+              ]
+            }
           }
         }
       }
@@ -284,6 +304,16 @@
               "projects/sub-app2/src/styles.css"
             ],
             "scripts": []
+          },
+          "configurations": {
+            "flags-off": {
+              "fileReplacements": [
+                {
+                  "replace": "src/environments/environment.ts",
+                  "with": "src/environments/environment.flags-off.ts"
+                }
+              ]
+            }
           }
         }
       }

@@ -4,6 +4,7 @@ import { RouterTestingModule } from '@angular/router/testing';
 import { Subject } from 'rxjs';
 import { TelemetryService } from './telemetry.service';
 import { RouterTelemetryService } from './router-telemetry.service';
+import { _setFlagOverridesForTesting } from '../feature-flags/feature-flag.service';
 
 describe('RouterTelemetryService', () => {
   let service: RouterTelemetryService;
@@ -11,6 +12,10 @@ describe('RouterTelemetryService', () => {
   let events$: Subject<any>;
 
   beforeEach(() => {
+    // Explicitly force flag ON so these specs pass in BOTH CI modes:
+    // - default (environment.ts: all ON) — override is redundant but harmless
+    // - flags-off (environment.flags-off.ts: all OFF) — override ensures ON behaviour is tested
+    _setFlagOverridesForTesting({ enableTelemetry: true });
     events$ = new Subject();
     TestBed.configureTestingModule({
       imports: [RouterTestingModule],
@@ -24,7 +29,12 @@ describe('RouterTelemetryService', () => {
     telemetry = TestBed.inject(TelemetryService);
   });
 
-  afterEach(() => service.ngOnDestroy());
+  afterEach(() => {
+    service.ngOnDestroy();
+    _setFlagOverridesForTesting(null);
+  });
+
+  // ── Flag ON (default dev behaviour) ──────────────────────────────────────
 
   it('emits a route.navigation_ms timing on NavigationEnd', fakeAsync(() => {
     events$.next(new NavigationStart(1, '/home'));
@@ -78,4 +88,37 @@ describe('RouterTelemetryService', () => {
     expect(telemetry.events[0].tags?.['url']).toBe('/a');
     expect(telemetry.events[1].tags?.['url']).toBe('/b');
   }));
+
+  // ── Flag OFF ──────────────────────────────────────────────────────────────
+
+  describe('when enableTelemetry is OFF', () => {
+    beforeEach(() => {
+      _setFlagOverridesForTesting({ enableTelemetry: false });
+      // Re-create the service so it picks up the override at construction time.
+      TestBed.resetTestingModule();
+      events$ = new Subject();
+      TestBed.configureTestingModule({
+        imports: [RouterTestingModule],
+        providers: [
+          RouterTelemetryService,
+          TelemetryService,
+          { provide: Router, useValue: { events: events$.asObservable() } },
+        ],
+      });
+      service = TestBed.inject(RouterTelemetryService);
+      telemetry = TestBed.inject(TelemetryService);
+    });
+
+    it('does not record any events when flag is OFF', fakeAsync(() => {
+      events$.next(new NavigationStart(1, '/home'));
+      tick(50);
+      events$.next(new NavigationEnd(1, '/home', '/home'));
+
+      expect(telemetry.events.length).toBe(0);
+    }));
+
+    it('ngOnDestroy does not throw when flag is OFF (Subscription.EMPTY path)', () => {
+      expect(() => service.ngOnDestroy()).not.toThrow();
+    });
+  });
 });

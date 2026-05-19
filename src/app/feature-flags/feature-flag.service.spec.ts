@@ -1,5 +1,5 @@
 import { TestBed } from '@angular/core/testing';
-import { FeatureFlagService, isFlagEnabled } from './feature-flag.service';
+import { FeatureFlagService, isFlagEnabled, _setFlagOverridesForTesting } from './feature-flag.service';
 
 // Spy on the environment module so tests are not coupled to the compiled value.
 import * as env from '../../environments/environment';
@@ -8,9 +8,12 @@ describe('FeatureFlagService', () => {
   let service: FeatureFlagService;
 
   beforeEach(() => {
+    _setFlagOverridesForTesting(null); // reset before each test
     TestBed.configureTestingModule({});
     service = TestBed.inject(FeatureFlagService);
   });
+
+  afterEach(() => _setFlagOverridesForTesting(null));
 
   it('should be created', () => {
     expect(service).toBeTruthy();
@@ -43,9 +46,37 @@ describe('FeatureFlagService', () => {
     const snap2 = service.snapshot();
     expect(snap2.enableTelemetry).toBe(env.environment.featureFlags.enableTelemetry);
   });
+
+  describe('flag OFF via _setFlagOverridesForTesting', () => {
+    it('isEnabled returns false when override sets flag to false', () => {
+      _setFlagOverridesForTesting({ enableTelemetry: false });
+      expect(service.isEnabled('enableTelemetry')).toBeFalse();
+    });
+
+    it('isEnabled returns true when override sets flag to true', () => {
+      _setFlagOverridesForTesting({ enableTelemetry: true });
+      expect(service.isEnabled('enableTelemetry')).toBeTrue();
+    });
+
+    it('only the overridden flag changes — other flags are unaffected', () => {
+      _setFlagOverridesForTesting({ enableTelemetry: false });
+      // enableReduxMonitor should still read from the environment
+      expect(service.isEnabled('enableReduxMonitor'))
+        .toBe(env.environment.featureFlags.enableReduxMonitor);
+    });
+
+    it('null override restores the environment value', () => {
+      _setFlagOverridesForTesting({ enableTelemetry: false });
+      _setFlagOverridesForTesting(null);
+      expect(service.isEnabled('enableTelemetry'))
+        .toBe(env.environment.featureFlags.enableTelemetry);
+    });
+  });
 });
 
 describe('isFlagEnabled (standalone helper)', () => {
+  afterEach(() => _setFlagOverridesForTesting(null));
+
   it('returns a boolean for every known flag', () => {
     expect(typeof isFlagEnabled('enableTelemetry')).toBe('boolean');
     expect(typeof isFlagEnabled('enableReduxMonitor')).toBe('boolean');
@@ -54,5 +85,15 @@ describe('isFlagEnabled (standalone helper)', () => {
 
   it('returns false for an unknown flag', () => {
     expect(isFlagEnabled('nonExistentFlag' as any)).toBeFalse();
+  });
+
+  it('respects _setFlagOverridesForTesting when flag is forced OFF', () => {
+    _setFlagOverridesForTesting({ enableReduxMonitor: false });
+    expect(isFlagEnabled('enableReduxMonitor')).toBeFalse();
+  });
+
+  it('respects _setFlagOverridesForTesting when flag is forced ON', () => {
+    _setFlagOverridesForTesting({ enableReduxMonitor: true });
+    expect(isFlagEnabled('enableReduxMonitor')).toBeTrue();
   });
 });

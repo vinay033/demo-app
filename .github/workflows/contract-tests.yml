@@ -22,7 +22,7 @@ on:
 
 jobs:
   contract-tests:
-    name: Contract & unit tests (${{ matrix.project }})
+    name: Contract & unit tests (${{ matrix.project.name }} / flags-${{ matrix.flag_mode }})
     runs-on: ubuntu-latest
 
     strategy:
@@ -35,6 +35,9 @@ jobs:
             ng_target: "sub-app1"
           - name: sub-app2
             ng_target: "sub-app2"
+        flag_mode:
+          - on    # environment.ts        — all flags true  (dev default)
+          - off   # environment.flags-off.ts — all flags false
 
     steps:
       - name: Checkout repository
@@ -72,13 +75,21 @@ jobs:
             npx tsc --noEmit -p projects/${{ matrix.project.name }}/tsconfig.app.json
           fi
 
-      - name: Run tests with coverage (${{ matrix.project.name }})
+      - name: Run tests with coverage (${{ matrix.project.name }} / flags-${{ matrix.flag_mode }})
         id: run-tests
         run: |
-          if [ -z "${{ matrix.project.ng_target }}" ]; then
-            npx ng test --no-watch --browsers=ChromeHeadlessCI 2>&1 | tee test-output.txt
+          # Build the --configuration flag: 'on' means no override (dev default),
+          # 'off' means --configuration=flags-off (environment.flags-off.ts).
+          if [ "${{ matrix.flag_mode }}" = "off" ]; then
+            CONFIG_FLAG="--configuration=flags-off"
           else
-            npx ng test ${{ matrix.project.ng_target }} --no-watch --browsers=ChromeHeadlessCI 2>&1 | tee test-output.txt
+            CONFIG_FLAG=""
+          fi
+
+          if [ -z "${{ matrix.project.ng_target }}" ]; then
+            npx ng test --no-watch --browsers=ChromeHeadlessCI $CONFIG_FLAG 2>&1 | tee test-output.txt
+          else
+            npx ng test ${{ matrix.project.ng_target }} --no-watch --browsers=ChromeHeadlessCI $CONFIG_FLAG 2>&1 | tee test-output.txt
           fi
         env:
           CHROME_BIN: /usr/bin/google-chrome-stable
@@ -89,7 +100,8 @@ jobs:
         run: |
           node - << 'JS'
             const fs      = require('fs');
-            const project = '${{ matrix.project.name }}';
+            const project  = '${{ matrix.project.name }}';
+            const flagMode = '${{ matrix.flag_mode }}';
             const jsonPath = `coverage/${project}/coverage-summary.json`;
 
             // ── parse coverage-summary.json if present ─────────────────────
@@ -119,7 +131,7 @@ jobs:
             const passed  = !output.includes('FAILED');
 
             const summary = [
-              `## ${overallIcon} Coverage — ${project}`,
+              `## ${overallIcon} Coverage — ${project} (flags-${flagMode})`,
               '',
               `**Specs:** ${lastRun}  ·  ${passed ? '✅ All passed' : '❌ Failures detected'}`,
               '',
@@ -139,11 +151,11 @@ jobs:
             console.log(`Coverage summary written for ${project}`);
           JS
 
-      - name: Upload coverage report (${{ matrix.project.name }})
+      - name: Upload coverage report (${{ matrix.project.name }} flags-${{ matrix.flag_mode }})
         uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: coverage-${{ matrix.project.name }}
+          name: coverage-${{ matrix.project.name }}-flags-${{ matrix.flag_mode }}
           path: coverage/${{ matrix.project.name }}/
           retention-days: 14
 
@@ -171,15 +183,19 @@ jobs:
           cat >> "$GITHUB_STEP_SUMMARY" << EOF
           ## ${ICON} Contract & unit tests — matrix summary
 
-          | Project | Specs | Result |
-          |---|---|---|
-          | demo-app  | 45 | ${RESULT} |
-          | sub-app1  | 8  | ${RESULT} |
-          | sub-app2  | 3  | ${RESULT} |
+          | Project | Flag mode | Specs | Result |
+          |---|---|---|---|
+          | demo-app  | flags-on  | 67 | ${RESULT} |
+          | demo-app  | flags-off | 67 | ${RESULT} |
+          | sub-app1  | flags-on  | 8  | ${RESULT} |
+          | sub-app1  | flags-off | 8  | ${RESULT} |
+          | sub-app2  | flags-on  | 3  | ${RESULT} |
+          | sub-app2  | flags-off | 3  | ${RESULT} |
 
-          **Total: 56 specs across 3 projects** · Coverage artifacts uploaded (14-day retention)
+          **Total: 6 matrix cells (3 projects × 2 flag modes)**
+          Each flag mode validates ON-path and OFF-path guard behaviour independently.
 
-          > Coverage reports: download from the *Artifacts* section of this run.
+          > Coverage reports: download the \`coverage-<project>-flags-<mode>\` artifacts.
           EOF
 
   # ── Coverage PR comment ────────────────────────────────────────────────────
@@ -197,10 +213,10 @@ jobs:
       pull-requests: write  # needed to create/edit PR comments
 
     steps:
-      - name: Download all coverage artifacts
+      - name: Download flags-on coverage artifacts (used for PR comment)
         uses: actions/download-artifact@v4
         with:
-          pattern: coverage-*
+          pattern: coverage-*-flags-on
           path: coverage-artifacts/
 
       - name: Build and post coverage comment
@@ -216,11 +232,12 @@ jobs:
             const { execSync } = require('child_process');
 
             const projects = ['demo-app', 'sub-app1', 'sub-app2'];
-            const specCounts = { 'demo-app': 45, 'sub-app1': 8, 'sub-app2': 3 };
+            const specCounts = { 'demo-app': 67, 'sub-app1': 8, 'sub-app2': 3 };
 
             // ── parse each project's coverage-summary.json ─────────────────
             function parseCoverage(project) {
-              const p = `coverage-artifacts/coverage-${project}/coverage-summary.json`;
+              // Artifacts are named coverage-<project>-flags-on
+              const p = `coverage-artifacts/coverage-${project}-flags-on/coverage-summary.json`;
               if (!fs.existsSync(p)) return null;
               return JSON.parse(fs.readFileSync(p, 'utf8')).total;
             }

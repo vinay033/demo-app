@@ -264,6 +264,55 @@ the mechanism that prevents:
 - A flag being silently removed from one environment but not the other.
 - A non-boolean value sneaking in.
 
+### CI matrix: flags-on and flags-off
+
+The `contract-tests` workflow runs a **2 × 3 matrix** (2 flag modes × 3 projects):
+
+| Job | Environment file | What it validates |
+|---|---|---|
+| `demo-app / flags-on` | `environment.ts` (all ON) | ON-path behaviour + coverage |
+| `demo-app / flags-off` | `environment.flags-off.ts` (all OFF) | OFF-path guard correctness |
+| `sub-app1 / flags-on` | `environment.ts` | ON-path behaviour |
+| `sub-app1 / flags-off` | `environment.flags-off.ts` | OFF-path guard correctness |
+| `sub-app2 / flags-on` | `environment.ts` | ON-path behaviour |
+| `sub-app2 / flags-off` | `environment.flags-off.ts` | OFF-path guard correctness |
+
+Run locally:
+
+```bash
+# Flags ON  (dev defaults — same as running ng test without --configuration)
+ng test demo-app --no-watch --browsers=ChromeHeadlessCI
+
+# Flags OFF (all flags false — validates every guard's no-op / fallback path)
+ng test demo-app --no-watch --browsers=ChromeHeadlessCI --configuration=flags-off
+```
+
+### Testing seam for OFF-path specs
+
+Specs that verify flag-OFF behaviour use the `_setFlagOverridesForTesting`
+helper, which overrides the compiled environment value at runtime:
+
+```typescript
+import { _setFlagOverridesForTesting } from '../feature-flags/feature-flag.service';
+
+describe('when enableTelemetry is OFF', () => {
+  beforeEach(() => _setFlagOverridesForTesting({ enableTelemetry: false }));
+  afterEach(() =>  _setFlagOverridesForTesting(null)); // restore
+
+  it('does not record events', () => { ... });
+});
+```
+
+ON-path specs explicitly force the flag ON so they pass in **both** CI modes:
+
+```typescript
+beforeEach(() => _setFlagOverridesForTesting({ enableTelemetry: true }));
+afterEach(() =>  _setFlagOverridesForTesting(null));
+```
+
+This means every flag guard is tested in both the ON and OFF state, regardless
+of which CI matrix cell is running.
+
 ---
 
 ## Naming conventions

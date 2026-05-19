@@ -21,6 +21,27 @@ export interface FeatureFlags {
   enableMfeTiming: boolean;
 }
 
+// ── Testing seam ─────────────────────────────────────────────────────────────
+// Tests that need to exercise the flag-OFF code path call
+// _setFlagOverridesForTesting() in beforeEach / afterEach.
+// Production and dev builds never call this function.
+let _testOverrides: Partial<FeatureFlags> | null = null;
+
+/**
+ * Override specific flags for the duration of a test.
+ * Call with `null` in afterEach to restore the environment default.
+ *
+ * ```typescript
+ * beforeEach(() => _setFlagOverridesForTesting({ enableTelemetry: false }));
+ * afterEach(() => _setFlagOverridesForTesting(null));
+ * ```
+ */
+export function _setFlagOverridesForTesting(overrides: Partial<FeatureFlags> | null): void {
+  _testOverrides = overrides;
+}
+
+// ── Service ───────────────────────────────────────────────────────────────────
+
 /**
  * FeatureFlagService — injectable service for checking feature flag state.
  *
@@ -41,9 +62,13 @@ export class FeatureFlagService {
 
   /**
    * Returns true when the named flag is enabled in the current environment.
+   * Test overrides (via _setFlagOverridesForTesting) take precedence.
    * Unknown keys return false (safe default).
    */
   isEnabled(flag: keyof FeatureFlags): boolean {
+    if (_testOverrides !== null && flag in _testOverrides) {
+      return _testOverrides[flag]!;
+    }
     return this.flags[flag] ?? false;
   }
 
@@ -58,7 +83,11 @@ export class FeatureFlagService {
 /**
  * Standalone helper for use outside Angular DI (Redux enhancers, factory fns).
  * Reads directly from the compiled environment object — no injection required.
+ * Test overrides (via _setFlagOverridesForTesting) take precedence.
  */
 export function isFlagEnabled(flag: keyof FeatureFlags): boolean {
+  if (_testOverrides !== null && flag in _testOverrides) {
+    return _testOverrides[flag]!;
+  }
   return environment.featureFlags[flag] ?? false;
 }
