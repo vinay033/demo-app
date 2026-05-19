@@ -12,7 +12,6 @@
 import { Injectable, OnDestroy } from '@angular/core';
 import { Router, NavigationStart, NavigationEnd, NavigationError, NavigationCancel } from '@angular/router';
 import { Subscription } from 'rxjs';
-import { filter } from 'rxjs/operators';
 import { TelemetryService } from './telemetry.service';
 import { isFlagEnabled } from '../feature-flags/feature-flag.service';
 

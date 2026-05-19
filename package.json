@@ -10,7 +10,9 @@
     "test:ci": "ng test --no-watch --browsers=ChromeHeadlessCI && ng test sub-app1 --no-watch --browsers=ChromeHeadlessCI && ng test sub-app2 --no-watch --browsers=ChromeHeadlessCI",
     "validate:docs": "node scripts/validate-diagrams.mjs",
     "prepare": "husky",
-    "verify:telemetry": "node scripts/verify-telemetry.mjs"
+    "verify:telemetry": "node scripts/verify-telemetry.mjs",
+    "lint": "eslint src/ projects/ --max-warnings 20",
+    "lint:telemetry": "eslint src/app/telemetry/ --max-warnings 4"
   },
   "private": true,
   "dependencies": {
@@ -33,12 +35,19 @@
   },
   "devDependencies": {
     "@angular-devkit/build-angular": "^14.2.13",
+    "@angular-eslint/eslint-plugin": "^21.4.0",
+    "@angular-eslint/eslint-plugin-template": "^21.4.0",
+    "@angular-eslint/schematics": "^21.4.0",
+    "@angular-eslint/template-parser": "^21.4.0",
     "@angular/cli": "^14.2.13",
     "@angular/compiler-cli": "^14.0.0",
     "@mermaid-js/mermaid-cli": "^11.15.0",
     "@types/jasmine": "~4.0.0",
     "@types/react-dom": "^19.2.3",
+    "@typescript-eslint/eslint-plugin": "^8.59.4",
+    "@typescript-eslint/parser": "^8.59.4",
     "audit-ci": "^7.1.0",
+    "eslint": "^10.4.0",
     "husky": "^9.1.7",
     "jasmine-core": "~4.1.0",
     "karma": "~6.3.0",

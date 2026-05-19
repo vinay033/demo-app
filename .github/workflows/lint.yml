@@ -1,0 +1,109 @@
+name: Lint
+
+on:
+  push:
+    branches: ['**']
+  pull_request:
+    branches: ['**']
+
+# Static analysis is advisory for most rules; only the telemetry strict tier
+# blocks a merge (errors = 0, max-warnings = 4 known Angular-14 patterns).
+
+jobs:
+  # ── Tier 1: full workspace (baseline rules) ─────────────────────────────
+  lint-workspace:
+    name: Lint / workspace
+    runs-on: ubuntu-latest
+    continue-on-error: true   # advisory — does not block merge
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 18
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci --legacy-peer-deps
+
+      - name: Run ESLint (baseline, all src)
+        id: lint-all
+        run: |
+          npm run lint -- --format stylish 2>&1 | tee lint-report.txt
+          EXIT=${PIPESTATUS[0]}
+          echo "exit_code=$EXIT" >> "$GITHUB_OUTPUT"
+          exit 0   # advisory job never fails the workflow
+
+      - name: Post lint summary
+        if: always()
+        run: |
+          {
+            echo "## 🔍 Lint report — workspace (advisory)"
+            echo ""
+            echo "| File | Rule | Severity |"
+            echo "|------|------|----------|"
+            # Extract error/warning lines and emit as a table (up to 30 rows)
+            grep -E "^\s+[0-9]+:[0-9]+\s+(error|warning)" lint-report.txt \
+              | head -30 \
+              | awk '{ file=FILENAME; sev=$3; rule=$NF; print "| `" file "` | `" rule "` | " sev " |" }' \
+              || echo "| — | No problems found | — |"
+            echo ""
+            echo "<details><summary>Full output</summary>"
+            echo ""
+            echo '```'
+            cat lint-report.txt
+            echo '```'
+            echo "</details>"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  # ── Tier 2: telemetry module (strict — BLOCKS merge on errors) ──────────
+  lint-telemetry-strict:
+    name: Lint / telemetry (strict)
+    runs-on: ubuntu-latest
+    # continue-on-error is NOT set — zero errors in telemetry is a hard gate
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 18
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci --legacy-peer-deps
+
+      - name: Run strict ESLint on src/app/telemetry/
+        id: lint-strict
+        run: npm run lint:telemetry -- --format stylish 2>&1 | tee lint-telemetry.txt
+
+      - name: Post telemetry lint summary
+        if: always()
+        run: |
+          ERRORS=$(grep -c "error" lint-telemetry.txt || true)
+          WARNINGS=$(grep -c "warning" lint-telemetry.txt || true)
+          STATUS="${{ steps.lint-strict.outcome }}"
+          ICON="✅"
+          [ "$STATUS" != "success" ] && ICON="❌"
+          {
+            echo "## ${ICON} Telemetry strict lint"
+            echo ""
+            echo "| Metric | Count |"
+            echo "|--------|-------|"
+            echo "| Errors | $ERRORS |"
+            echo "| Warnings | $WARNINGS |"
+            echo "| Max warnings | 4 (known Angular-14 constructor injection) |"
+            echo ""
+            echo "**Rules enforced:**"
+            echo "- \`explicit-function-return-type\` — all exported functions must declare return type"
+            echo "- \`no-floating-promises\` — unhandled promises in event pipelines are errors"
+            echo "- \`strict-boolean-expressions\` — implicit string/number truthiness disallowed"
+            echo "- \`prefer-readonly\` — class fields only assigned in constructor must be readonly"
+            echo "- \`no-unnecessary-type-assertion\` — redundant casts are errors"
+            echo ""
+            echo "<details><summary>Full output</summary>"
+            echo ""
+            echo '```'
+            cat lint-telemetry.txt
+            echo '```'
+            echo "</details>"
+          } >> "$GITHUB_STEP_SUMMARY"

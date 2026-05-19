@@ -3,13 +3,15 @@ import { Router, NavigationStart, NavigationEnd, NavigationError, NavigationCanc
 import { RouterTestingModule } from '@angular/router/testing';
 import { Subject } from 'rxjs';
 import { TelemetryService } from './telemetry.service';
+// RouterEvent is the union base type for all router event classes
+type RouterEvent = NavigationStart | NavigationEnd | NavigationError | NavigationCancel;
 import { RouterTelemetryService } from './router-telemetry.service';
 import { _setFlagOverridesForTesting } from '../feature-flags/feature-flag.service';
 
 describe('RouterTelemetryService', () => {
   let service: RouterTelemetryService;
   let telemetry: TelemetryService;
-  let events$: Subject<any>;
+  let events$: Subject<RouterEvent>;
 
   beforeEach(() => {
     // Explicitly force flag ON so these specs pass in BOTH CI modes:

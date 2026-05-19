@@ -4,7 +4,6 @@ import { TelemetryService } from './telemetry.service';
 import { _setFlagOverridesForTesting } from '../feature-flags/feature-flag.service';
 
 describe('WebVitalsService', () => {
-  let service: WebVitalsService;
   let telemetry: TelemetryService;
 
   beforeEach(() => {
@@ -31,7 +30,7 @@ describe('WebVitalsService', () => {
   });
 
   it('pipes a simulated LCP metric as a timing event', () => {
-    service = TestBed.inject(WebVitalsService);
+    TestBed.inject(WebVitalsService); // ensure constructor side-effects run
 
     // Simulate what WebVitalsService.collect() does internally
     telemetry.timing('web_vitals.lcp', 1200, { rating: 'good', navigation_type: 'navigate' });
@@ -44,7 +43,7 @@ describe('WebVitalsService', () => {
   });
 
   it('pipes a simulated CLS metric as a gauge (score × 1000)', () => {
-    service = TestBed.inject(WebVitalsService);
+    TestBed.inject(WebVitalsService); // ensure constructor side-effects run
 
     telemetry.gauge('web_vitals.cls', Math.round(0.05 * 1000), { rating: 'good', navigation_type: 'navigate' });
 
@@ -55,7 +54,7 @@ describe('WebVitalsService', () => {
   });
 
   it('pipes a simulated INP metric with needs-improvement rating', () => {
-    service = TestBed.inject(WebVitalsService);
+    TestBed.inject(WebVitalsService); // ensure constructor side-effects run
 
     telemetry.timing('web_vitals.inp', 250, { rating: 'needs-improvement', navigation_type: 'navigate' });
 
@@ -75,7 +74,7 @@ describe('WebVitalsService', () => {
       _setFlagOverridesForTesting({ enableTelemetry: false });
       // Re-inject from a fresh TestBed state for this test
       expect(() => {
-        const svc = TestBed.inject(WebVitalsService);
+        TestBed.inject(WebVitalsService);
       }).not.toThrow();
     });
 

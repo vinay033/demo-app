@@ -65,7 +65,7 @@ export class TelemetryService {
    * @returns    true if the browser accepted the beacon, false otherwise
    */
   flush(url: string): boolean {
-    if (!this.events.length) return true;
+    if (this.events.length === 0) return true;
     const ndjson = this.events.map(e => JSON.stringify(e)).join('\n');
     const blob = new Blob([ndjson], { type: 'application/x-ndjson' });
     const ok = navigator.sendBeacon(url, blob);

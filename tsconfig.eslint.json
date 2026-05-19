@@ -1,0 +1,12 @@
+// Extended tsconfig used only by ESLint (includes all TS files for type-aware rules).
+// Not used by the Angular build toolchain.
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "noEmit": true
+  },
+  "include": [
+    "src/**/*.ts",
+    "projects/**/*.ts"
+  ]
+}

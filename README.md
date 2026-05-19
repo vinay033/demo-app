@@ -12,6 +12,7 @@ This project was generated with [Angular CLI](https://github.com/angular/angular
 | [Security](./SECURITY.md) | Vulnerability scanning process, known accepted risks, upgrade path |
 | [Telemetry](./docs/telemetry.md) | Instrumentation points, how to view metrics (DevTools, staging, prod backends) |
 | [Feature Flags](./docs/feature-flags.md) | Flag lifecycle: creation, defaults, enable, disable, removal checklist |
+| [Static Analysis](./docs/static-analysis.md) | ESLint tiers, strict rules for telemetry module, how to add rules |
 
 ## Development server
 
