@@ -10,6 +10,7 @@ This project was generated with [Angular CLI](https://github.com/angular/angular
 | [Onboarding walk](./docs/onboarding-walk.md) | Step-by-step Copilot Chat prompts for new developers |
 | [Contributing](./CONTRIBUTING.md) | Branching strategy, PR expectations, Copilot guidance |
 | [Security](./SECURITY.md) | Vulnerability scanning process, known accepted risks, upgrade path |
+| [Telemetry](./docs/telemetry.md) | Instrumentation points, how to view metrics (DevTools, staging, prod backends) |
 
 ## Development server
 
