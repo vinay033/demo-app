@@ -29,10 +29,15 @@ import { Injectable } from '@angular/core';
 import { onLCP, onCLS, onINP, onFCP, onTTFB } from 'web-vitals';
 import type { MetricType } from 'web-vitals';
 import { TelemetryService } from './telemetry.service';
+import { isFlagEnabled } from '../feature-flags/feature-flag.service';
 
 @Injectable({ providedIn: 'root' })
 export class WebVitalsService {
   constructor(private readonly telemetry: TelemetryService) {
+    // Feature flag guard: skip observer registration when telemetry is OFF.
+    if (!isFlagEnabled('enableTelemetry')) {
+      return;
+    }
     this.collect();
   }
 

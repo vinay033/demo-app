@@ -2,8 +2,29 @@
 // `ng build` replaces `environment.ts` with `environment.prod.ts`.
 // The list of file replacements can be found in `angular.json`.
 
+import { FeatureFlags } from '../app/feature-flags/feature-flag.service';
+
+const featureFlags: FeatureFlags = {
+  /** Gate all telemetry instrumentation (error handler, router timing, web-vitals). */
+  enableTelemetry: true,
+  /** Gate the Redux dispatch-count monitor in sub-app1. */
+  enableReduxMonitor: true,
+  /** Gate the mfeTimed() load-timing wrapper in app-routing. */
+  enableMfeTiming: true,
+};
+
 export const environment = {
-  production: false
+  production: false,
+
+  /**
+   * Feature flags — development defaults.
+   * All flags default ON in dev so engineers can exercise new behaviour
+   * without extra setup. Flip individual flags to false to test the
+   * disabled code path locally.
+   *
+   * See docs/feature-flags.md for the full lifecycle guide.
+   */
+  featureFlags,
 };
 
 /*

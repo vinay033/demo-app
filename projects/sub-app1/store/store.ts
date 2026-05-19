@@ -1,4 +1,5 @@
 import { createStore, Store, StoreEnhancer, AnyAction } from 'redux';
+import { isFlagEnabled } from '../../../src/app/feature-flags/feature-flag.service';
 
 export interface AppState {
   [key: string]: unknown;
@@ -37,4 +38,11 @@ function dispatchMonitorEnhancer(): StoreEnhancer {
   };
 }
 
-export const store: Store<AppState> = createStore(rootReducer, dispatchMonitorEnhancer());
+// Feature flag: enableReduxMonitor
+// OFF → store is created without the monitor enhancer (zero overhead).
+// ON  → every dispatch is counted and logged.
+// Remove the ternary and use dispatchMonitorEnhancer() unconditionally
+// once the flag has been ON in production for ≥ 2 release cycles.
+export const store: Store<AppState> = isFlagEnabled('enableReduxMonitor')
+  ? createStore(rootReducer, dispatchMonitorEnhancer())
+  : createStore(rootReducer);

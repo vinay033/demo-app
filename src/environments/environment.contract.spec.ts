@@ -7,8 +7,9 @@
  *
  * Rules enforced:
  *   1. `production` key must exist and be a boolean.
- *   2. No extra keys are allowed without a deliberate review of this file.
- *   3. dev and prod shapes must be structurally identical (only values differ).
+ *   2. `featureFlags` key must exist with exactly the documented flag names.
+ *   3. No extra keys are allowed without a deliberate review of this file.
+ *   4. dev and prod shapes must be structurally identical (only values differ).
  */
 
 import { environment as devEnv } from './environment';
@@ -44,8 +45,23 @@ describe('environment object — shape contract', () => {
 
     it('has no undocumented extra keys', () => {
       // UPDATE THIS LIST when you intentionally add a new environment key.
-      const ALLOWED_KEYS = ['production'];
+      const ALLOWED_KEYS = ['production', 'featureFlags'];
       assertExactKeys(devEnv, ALLOWED_KEYS, 'dev environment');
+    });
+
+    it('featureFlags contains exactly the documented flags', () => {
+      // UPDATE THIS LIST when you add or remove a feature flag.
+      // See docs/feature-flags.md and src/app/feature-flags/feature-flag.service.ts.
+      const ALLOWED_FLAGS = ['enableTelemetry', 'enableReduxMonitor', 'enableMfeTiming'];
+      assertExactKeys(devEnv.featureFlags, ALLOWED_FLAGS, 'dev featureFlags');
+    });
+
+    it('all featureFlags values are booleans', () => {
+      Object.entries(devEnv.featureFlags).forEach(([key, value]) => {
+        expect(typeof value)
+          .withContext(`dev featureFlags.${key} must be a boolean`)
+          .toBe('boolean');
+      });
     });
   });
 
@@ -63,8 +79,21 @@ describe('environment object — shape contract', () => {
     });
 
     it('has no undocumented extra keys', () => {
-      const ALLOWED_KEYS = ['production'];
+      const ALLOWED_KEYS = ['production', 'featureFlags'];
       assertExactKeys(prodEnv, ALLOWED_KEYS, 'prod environment');
+    });
+
+    it('featureFlags contains exactly the documented flags', () => {
+      const ALLOWED_FLAGS = ['enableTelemetry', 'enableReduxMonitor', 'enableMfeTiming'];
+      assertExactKeys(prodEnv.featureFlags, ALLOWED_FLAGS, 'prod featureFlags');
+    });
+
+    it('all featureFlags values are booleans', () => {
+      Object.entries(prodEnv.featureFlags).forEach(([key, value]) => {
+        expect(typeof value)
+          .withContext(`prod featureFlags.${key} must be a boolean`)
+          .toBe('boolean');
+      });
     });
   });
 
@@ -75,6 +104,14 @@ describe('environment object — shape contract', () => {
       expect(devKeys)
         .withContext('dev and prod environment objects must share the same keys')
         .toEqual(prodKeys);
+    });
+
+    it('dev and prod featureFlags have the same set of flag names', () => {
+      const devFlags = Object.keys(devEnv.featureFlags).sort();
+      const prodFlags = Object.keys(prodEnv.featureFlags).sort();
+      expect(devFlags)
+        .withContext('dev and prod featureFlags must have the same flag names')
+        .toEqual(prodFlags);
     });
   });
 });

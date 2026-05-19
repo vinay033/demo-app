@@ -12,8 +12,9 @@ Thank you for contributing! This document covers everything you need to get chan
 4. [Pull Request Expectations](#pull-request-expectations)
 5. [Running Tests and Coverage Locally](#running-tests-and-coverage-locally)
 6. [Dependency Upgrade Policy](#dependency-upgrade-policy)
-7. [Working with GitHub Copilot](#working-with-github-copilot)
-8. [Project Structure Quick Reference](#project-structure-quick-reference)
+7. [Feature Flag Policy](#feature-flag-policy)
+8. [Working with GitHub Copilot](#working-with-github-copilot)
+9. [Project Structure Quick Reference](#project-structure-quick-reference)
 
 ---
 
@@ -166,6 +167,27 @@ coverageReporter: {
   }
 }
 ```
+
+---
+
+## Feature Flag Policy
+
+Feature flags in this repo are compile-time booleans in `src/environments/`.
+The **full lifecycle** — creation, default state, how to enable, disable, and
+when to remove — is documented in **[docs/feature-flags.md](./docs/feature-flags.md)**.
+
+Quick reference for contributors:
+
+| Task | Action |
+|---|---|
+| **Add a flag** | Add key to `FeatureFlags` interface → both env files → `ALLOWED_FLAGS` in contract spec |
+| **Enable in prod** | Set `true` in `environment.prod.ts`, PR with staging evidence |
+| **Disable / roll back** | Set `false` in `environment.prod.ts`, add dated comment |
+| **Remove** | ≥ 2 release cycles at `true` in prod → delete key from interface, both envs, contract spec, all call-sites |
+
+The [`environment.contract.spec.ts`](./src/environments/environment.contract.spec.ts)
+is the **CI gate** — it will fail if a flag exists in `FeatureFlags` but not
+in both environment files, or if the shapes diverge between dev and prod.
 
 ---
 

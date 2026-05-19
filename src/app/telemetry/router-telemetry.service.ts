@@ -14,6 +14,7 @@ import { Router, NavigationStart, NavigationEnd, NavigationError, NavigationCanc
 import { Subscription } from 'rxjs';
 import { filter } from 'rxjs/operators';
 import { TelemetryService } from './telemetry.service';
+import { isFlagEnabled } from '../feature-flags/feature-flag.service';
 
 @Injectable({ providedIn: 'root' })
 export class RouterTelemetryService implements OnDestroy {
@@ -21,6 +22,14 @@ export class RouterTelemetryService implements OnDestroy {
   private readonly sub: Subscription;
 
   constructor(private readonly router: Router, private readonly telemetry: TelemetryService) {
+    // Feature flag guard: when enableTelemetry is OFF this service is a no-op.
+    // Subscribe unconditionally so Angular does not complain about an
+    // uninitialised field; the subscription immediately unsubscribes.
+    if (!isFlagEnabled('enableTelemetry')) {
+      this.sub = Subscription.EMPTY;
+      return;
+    }
+
     this.sub = this.router.events.subscribe(event => {
       if (event instanceof NavigationStart) {
         this.starts.set(event.id, performance.now());
