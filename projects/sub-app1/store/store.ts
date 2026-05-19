@@ -24,6 +24,11 @@ function rootReducer(state: AppState = {}): AppState {
 function dispatchMonitorEnhancer(): StoreEnhancer {
   const counts: Record<string, number> = {};
 
+  // Redux v4 enhancer API: StoreEnhancerStoreCreator's generic action type parameter
+  // (A extends Action) conflicts with AnyAction in the inner dispatch override.
+  // TypeScript cannot infer the inner function signature without explicit any.
+  // Revisit when upgrading to redux-toolkit which ships first-class enhancer types.
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   return (createStoreFn: any) => (reducer: any, preloadedState: any) => {
     const inner = createStoreFn(reducer, preloadedState);
 

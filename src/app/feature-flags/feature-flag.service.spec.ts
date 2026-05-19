@@ -27,7 +27,10 @@ describe('FeatureFlagService', () => {
   });
 
   it('isEnabled returns false for an unknown flag (safe default)', () => {
-    // Cast to bypass TypeScript — simulates a removed flag still called at a stale call-site.
+    // Intentional: simulates a removed flag still called at a stale call-site
+    // (key no longer in FeatureFlags type). The any cast is the only way to bypass
+    // TypeScript here, which is exactly the runtime condition being tested.
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     expect(service.isEnabled('nonExistentFlag' as any)).toBeFalse();
   });
 
@@ -41,6 +44,10 @@ describe('FeatureFlagService', () => {
   });
 
   it('snapshot is a copy — mutating it does not affect the service', () => {
+    // Cast to any so we can mutate the returned copy without TypeScript
+    // complaining about readonly fields. Verifies the snapshot is a defensive
+    // copy, not a live reference to the internal flags object.
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const snap1 = service.snapshot() as any;
     snap1.enableTelemetry = !snap1.enableTelemetry;
     const snap2 = service.snapshot();
@@ -84,6 +91,9 @@ describe('isFlagEnabled (standalone helper)', () => {
   });
 
   it('returns false for an unknown flag', () => {
+    // Same rationale as above: simulates a stale call-site passing a key
+    // that no longer exists in FeatureFlags (removed flag scenario).
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     expect(isFlagEnabled('nonExistentFlag' as any)).toBeFalse();
   });
 

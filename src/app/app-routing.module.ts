@@ -8,7 +8,13 @@ import { RouterModule, Routes } from '@angular/router';
  *
  * Replace the console.log with TelemetryService.timing() once the Angular DI
  * context is available here (e.g. via an APP_INITIALIZER factory).
+ *
+ * @see Epic #2 issue: MFE webpack wiring (src/app/app-routing.module.ts lazy routes)
  */
+// Intentional scaffolding: function is wired in the commented-out route definitions below
+// and will be uncommented as part of the MFE webpack wiring work (Epic #2).
+// Removing it would lose the implementation and JSDoc context before the epic starts.
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
 function mfeTimed<T>(remote: string, factory: () => Promise<T>): () => Promise<T> {
   return () => {
     const t0 = performance.now();
