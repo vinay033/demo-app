@@ -97,7 +97,15 @@ export function scheduleBeaconRetry(
   );
 
   setTimeout(() => {
-    const ok = navigator.sendBeacon(url, blob);
+    let ok: boolean;
+    try {
+      ok = navigator.sendBeacon(url, blob);
+    } catch {
+      // sendBeacon threw during a retry (e.g. URL became invalid, quota exceeded).
+      // Stop the retry chain — data is preserved in the ring buffer for the next flush.
+      console.error('[telemetry] sendBeacon threw during retry — stopping retry chain');
+      return;
+    }
     if (!ok) {
       scheduleBeaconRetry(url, blob, options, attempt + 1);
     }

@@ -103,7 +103,16 @@ export class TelemetryService {
         [chunk.map(e => JSON.stringify(e)).join('\n')],
         { type: 'application/x-ndjson' },
       );
-      const ok = navigator.sendBeacon(url, blob);
+      let ok: boolean;
+      try {
+        ok = navigator.sendBeacon(url, blob);
+      } catch (err) {
+        // sendBeacon can throw TypeError for malformed URLs or if the browser
+        // rejects the call entirely. Treat as a permanent failure for this chunk.
+        console.error('[telemetry] sendBeacon threw — flush aborted', err);
+        allSent = false;
+        break;
+      }
       if (ok) {
         sentCount += chunk.length;
       } else {
