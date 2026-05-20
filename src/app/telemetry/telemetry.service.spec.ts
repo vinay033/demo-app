@@ -92,6 +92,7 @@ describe('TelemetryService', () => {
     });
 
     it('returns false and retains events when sendBeacon fails', () => {
+      jasmine.clock().install();
       spyOn(navigator, 'sendBeacon').and.returnValue(false);
       service.counter('keep');
 
@@ -99,6 +100,7 @@ describe('TelemetryService', () => {
 
       expect(ok).toBeFalse();
       expect(service.events.length).toBe(1);
+      jasmine.clock().uninstall();
     });
 
     it('returns true immediately when there are no events', () => {
@@ -106,6 +108,16 @@ describe('TelemetryService', () => {
       const ok = service.flush('https://collector.example.com/metrics');
       expect(ok).toBeTrue();
       expect(navigator.sendBeacon).not.toHaveBeenCalled();
+    });
+
+    it('returns false and warns when URL is empty', () => {
+      spyOn(navigator, 'sendBeacon');
+      spyOn(console, 'warn');
+      service.counter('x');
+      const ok = service.flush('');
+      expect(ok).toBeFalse();
+      expect(navigator.sendBeacon).not.toHaveBeenCalled();
+      expect(console.warn).toHaveBeenCalledWith(jasmine.stringContaining('empty URL'));
     });
 
     it('sends NDJSON: one JSON object per line', () => {
@@ -118,8 +130,33 @@ describe('TelemetryService', () => {
       service.counter('ev2');
       service.flush('https://x');
 
-      // Read the blob synchronously by checking type
       expect(capturedBlob!.type).toBe('application/x-ndjson');
+    });
+
+    it('splits a large buffer into multiple chunks and sends each separately', () => {
+      spyOn(navigator, 'sendBeacon').and.returnValue(true);
+      // Add 250 events — should produce 2 chunks (200 + 50) for BEACON_CHUNK_EVENTS=200
+      for (let i = 0; i < 250; i++) service.counter('x');
+
+      service.flush('https://collector.example.com/metrics');
+
+      expect((navigator.sendBeacon as jasmine.Spy).calls.count()).toBe(2);
+      expect(service.events.length).toBe(0); // all sent
+    });
+
+    it('stops sending further chunks after a chunk failure and retains unsent events', () => {
+      jasmine.clock().install();
+      let beaconCalls = 0;
+      spyOn(navigator, 'sendBeacon').and.callFake(() => ++beaconCalls !== 1); // first call fails
+      for (let i = 0; i < 250; i++) service.counter('x'); // 2 chunks: 200 + 50
+
+      service.flush('https://collector.example.com/metrics');
+
+      // Only 1 sendBeacon call attempted (stopped at failure)
+      expect(beaconCalls).toBe(1);
+      // All 250 events retained (first chunk failed, second never sent)
+      expect(service.events.length).toBe(250);
+      jasmine.clock().uninstall();
     });
   });
 

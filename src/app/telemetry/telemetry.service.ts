@@ -27,6 +27,12 @@
  */
 
 import { Injectable } from '@angular/core';
+import {
+  chunkArray,
+  scheduleBeaconRetry,
+  BEACON_CHUNK_EVENTS,
+  RetryOptions,
+} from './resilience';
 
 export interface TelemetryEvent {
   type: 'counter' | 'timing' | 'gauge';
@@ -59,18 +65,62 @@ export class TelemetryService {
    * sendBeacon is fire-and-forget and survives page unload — safe to call in
    * ngOnDestroy or a 'visibilitychange' / 'pagehide' listener.
    *
-   * The payload is newline-delimited JSON (NDJSON), one event per line.
+   * Resilience improvements over a bare sendBeacon call:
+   *   • URL guard     — returns false immediately for an empty/missing URL
+   *   • API guard     — returns false in SSR / non-browser environments
+   *   • Chunking      — splits the buffer into ≤200-event batches (~30 KB each)
+   *                     to stay under the browser's ~64 KB sendBeacon limit
+   *   • Retry backoff — schedules up to 3 retries (1 s → 2 s → 4 s) for any
+   *                     chunk that the browser rejects (ok = false); stops
+   *                     sending further chunks on first failure
    *
-   * @param url  Collector endpoint, e.g. 'https://ingest.example.com/metrics'
-   * @returns    true if the browser accepted the beacon, false otherwise
+   * @param url          Collector endpoint, e.g. 'https://ingest.example.com/metrics'
+   * @param retryOptions Override retry defaults (optional)
+   * @returns            true if every chunk was accepted on the first attempt
    */
-  flush(url: string): boolean {
+  flush(url: string, retryOptions?: RetryOptions): boolean {
+    // Guard: empty URL — sendBeacon would throw TypeError
+    if (!url) {
+      console.warn('[telemetry] flush() called with empty URL — skipped');
+      return false;
+    }
+
+    // Guard: sendBeacon unavailable (SSR / Node / pre-Chrome-39 browsers)
+    if (typeof navigator === 'undefined' || typeof navigator.sendBeacon !== 'function') {
+      return false;
+    }
+
     if (this.events.length === 0) return true;
-    const ndjson = this.events.map(e => JSON.stringify(e)).join('\n');
-    const blob = new Blob([ndjson], { type: 'application/x-ndjson' });
-    const ok = navigator.sendBeacon(url, blob);
-    if (ok) this.events.length = 0; // clear buffer on successful handoff
-    return ok;
+
+    // Split into ≤BEACON_CHUNK_EVENTS batches to stay under the ~64 KB limit.
+    // At ~150 bytes/event, 200 events ≈ 30 KB — half the browser limit.
+    const chunks = chunkArray(this.events, BEACON_CHUNK_EVENTS);
+    let sentCount = 0;
+    let allSent = true;
+
+    for (const chunk of chunks) {
+      const blob = new Blob(
+        [chunk.map(e => JSON.stringify(e)).join('\n')],
+        { type: 'application/x-ndjson' },
+      );
+      const ok = navigator.sendBeacon(url, blob);
+      if (ok) {
+        sentCount += chunk.length;
+      } else {
+        allSent = false;
+        // Retry this chunk; stop sending further chunks — if one fails,
+        // subsequent ones are likely to fail too (browser queue full, etc.).
+        scheduleBeaconRetry(url, blob, retryOptions);
+        break;
+      }
+    }
+
+    // Remove successfully sent events from the front of the ring buffer.
+    if (sentCount > 0) {
+      this.events.splice(0, sentCount);
+    }
+
+    return allSent;
   }
 
   private _emit(event: Omit<TelemetryEvent, 'timestamp'>): void {

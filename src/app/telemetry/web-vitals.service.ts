@@ -30,6 +30,7 @@ import { onLCP, onCLS, onINP, onFCP, onTTFB } from 'web-vitals';
 import type { MetricType } from 'web-vitals';
 import { TelemetryService } from './telemetry.service';
 import { isFlagEnabled } from '../feature-flags/feature-flag.service';
+import { safeCallback } from './resilience';
 
 @Injectable({ providedIn: 'root' })
 export class WebVitalsService {
@@ -42,7 +43,10 @@ export class WebVitalsService {
   }
 
   private collect(): void {
-    const report = (metric: MetricType): void => {
+    // safeCallback wraps `report` so any exception thrown during metric
+    // processing (e.g. telemetry service torn down before LCP fires) is caught
+    // and logged rather than silently swallowed by the PerformanceObserver runtime.
+    const report = safeCallback((metric: MetricType): void => {
       const tags: Record<string, string> = {
         rating: metric.rating,
         navigation_type: metric.navigationType,
@@ -62,12 +66,20 @@ export class WebVitalsService {
           tags,
         );
       }
-    };
+    });
 
-    onLCP(report);
-    onCLS(report);
-    onINP(report);
-    onFCP(report);
-    onTTFB(report);
+    // Guard the registration calls: in restricted browser environments
+    // (e.g. privacy-hardened profiles, older browsers) PerformanceObserver
+    // construction may throw. A single catch here prevents an observer setup
+    // failure from propagating to the Angular error boundary.
+    try {
+      onLCP(report);
+      onCLS(report);
+      onINP(report);
+      onFCP(report);
+      onTTFB(report);
+    } catch (err) {
+      console.error('[telemetry] web-vitals observer registration failed', err);
+    }
   }
 }
