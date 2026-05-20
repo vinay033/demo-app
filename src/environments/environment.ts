@@ -17,6 +17,13 @@ export const environment = {
   production: false,
 
   /**
+   * Telemetry collector endpoint.
+   * Empty string = disabled (dev default — no beacons sent).
+   * Set to a real URL (e.g. https://collector.example.com/metrics) to enable.
+   */
+  telemetryEndpoint: '',
+
+  /**
    * Feature flags — development defaults.
    * All flags default ON in dev so engineers can exercise new behaviour
    * without extra setup. Flip individual flags to false to test the

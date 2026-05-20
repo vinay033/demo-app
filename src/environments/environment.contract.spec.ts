@@ -45,8 +45,12 @@ describe('environment object — shape contract', () => {
 
     it('has no undocumented extra keys', () => {
       // UPDATE THIS LIST when you intentionally add a new environment key.
-      const ALLOWED_KEYS = ['production', 'featureFlags'];
+      const ALLOWED_KEYS = ['production', 'featureFlags', 'telemetryEndpoint'];
       assertExactKeys(devEnv, ALLOWED_KEYS, 'dev environment');
+    });
+
+    it('"telemetryEndpoint" is a string', () => {
+      expect(typeof (devEnv as { telemetryEndpoint?: unknown }).telemetryEndpoint).toBe('string');
     });
 
     it('featureFlags contains exactly the documented flags', () => {
@@ -79,8 +83,12 @@ describe('environment object — shape contract', () => {
     });
 
     it('has no undocumented extra keys', () => {
-      const ALLOWED_KEYS = ['production', 'featureFlags'];
+      const ALLOWED_KEYS = ['production', 'featureFlags', 'telemetryEndpoint'];
       assertExactKeys(prodEnv, ALLOWED_KEYS, 'prod environment');
+    });
+
+    it('"telemetryEndpoint" is a string', () => {
+      expect(typeof (prodEnv as { telemetryEndpoint?: unknown }).telemetryEndpoint).toBe('string');
     });
 
     it('featureFlags contains exactly the documented flags', () => {
