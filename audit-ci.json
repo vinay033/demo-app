@@ -1,0 +1,78 @@
+{
+  "$schema": "https://github.com/IBM/audit-ci/raw/main/docs/schema.json",
+
+  "moderate": false,
+  "high":     false,
+  "critical": true,
+
+  "allowlist": [
+    "GHSA-23c5-xmqv-rm74",
+    "GHSA-2g4f-4pwh-qvx6",
+    "GHSA-34x7-hfp2-rc4v",
+    "GHSA-38r7-794h-5758",
+    "GHSA-3ppc-4f35-3m26",
+    "GHSA-4v9v-hfq4-rm2v",
+    "GHSA-4vvj-4cpr-p986",
+    "GHSA-52f5-9888-hmc6",
+    "GHSA-58c5-g7wp-6w37",
+    "GHSA-5c6j-r48x-rmvq",
+    "GHSA-67mh-4wv8-2f99",
+    "GHSA-79cf-xcqc-c78w",
+    "GHSA-7r86-cg39-jmmj",
+    "GHSA-83g3-92jg-28cx",
+    "GHSA-8fgc-7cc6-rx7x",
+    "GHSA-8qq5-rm4j-mr97",
+    "GHSA-968p-4wvh-cqc8",
+    "GHSA-9jgg-88mc-972h",
+    "GHSA-9ppj-qmqm-q256",
+    "GHSA-jrmj-c5cx-3cw6",
+    "GHSA-prjf-86w9-mfqv",
+    "GHSA-qffp-2rhf-9h96",
+    "GHSA-qj8w-gfj5-8c6v",
+    "GHSA-qx2v-qp2m-jg93",
+    "GHSA-r6q2-hw4h-h46w",
+    "GHSA-v4hv-rgfq-gp49",
+    "GHSA-vpq2-c234-7xj6",
+    "GHSA-wr3j-pwj9-hqq6"
+  ],
+
+  "_allowlist_rationale": {
+    "_summary": "All 28 remaining advisories are transitive dependencies of @angular/core@14, @angular-devkit/build-angular@14, or @angular/cli@14. They cannot be resolved without a major Angular workspace migration (14 → 15 → ... → 21). The workspace currently has no ESLint config and no webpack remote configs for Module Federation — those gaps should be closed before upgrading Angular. Remediation path: run `ng update @angular/core @angular/cli` iteratively per major version. Target: Angular 17 LTS as first stable step.",
+
+    "GHSA-58c5-g7wp-6w37": "Angular XSRF token leakage via protocol-relative URLs (@angular/common). DevDependency in build pipeline only; app does not run in production from this workspace. Fix: Angular 21.",
+    "GHSA-jrmj-c5cx-3cw6": "Angular XSS via unsanitized SVG script attributes (@angular/compiler, @angular/core). Fix: Angular 21.",
+    "GHSA-v4hv-rgfq-gp49": "Angular stored XSS via SVG animation and MathML attributes (@angular/compiler). Fix: Angular 21.",
+    "GHSA-prjf-86w9-mfqv": "Angular i18n XSS vulnerability (@angular/core). Fix: Angular 21.",
+
+    "GHSA-9ppj-qmqm-q256": "webpack-dev-server cross-origin source code exposure — only active when running `ng serve` in a local dev session, never in CI or production. Fix: Angular 21 (brings webpack-dev-server 5).",
+    "GHSA-qx2v-qp2m-jg93": "webpack-dev-server source code theft on non-HTTPS origins. Same risk profile as GHSA-9ppj-qmqm-q256. Fix: Angular 21.",
+    "GHSA-8fgc-7cc6-rx7x": "webpack-dev-server HTTPS cross-origin exposure. Same risk profile. Fix: Angular 21.",
+    "GHSA-4vvj-4cpr-p986": "webpack DOM-clobbering XSS gadget (AutoPublicPathRuntimeModule). Build-time only; output is static HTML. Fix: Angular 21.",
+    "GHSA-4v9v-hfq4-rm2v": "webpack buildHttp allowedUris bypass via URL userinfo. Build-time SSRF only triggered by malicious webpack config. Fix: Angular 21.",
+    "GHSA-52f5-9888-hmc6": "webpack buildHttp HTTP redirect SSRF. Same profile as GHSA-4v9v-hfq4-rm2v. Fix: Angular 21.",
+
+    "GHSA-3ppc-4f35-3m26": "webpack-dev-middleware path traversal. Only present during `ng serve`; not in production. Fix: Angular 21.",
+
+    "GHSA-83g3-92jg-28cx": "PostCSS XSS via unescaped </style> in CSS stringify output. Build-time artefact; final HTML is sanitised. Fix: Angular 21.",
+    "GHSA-qffp-2rhf-9h96": "esbuild dev server accepts cross-origin requests. Dev-only; same profile as webpack-dev-server issues above. Fix: Angular 21.",
+    "GHSA-67mh-4wv8-2f99": "@babel/runtime inefficient RegExp in named capturing group transpilation. Build-time CPU exhaustion only; no user-facing risk. Fix: Angular 21.",
+
+    "GHSA-38r7-794h-5758": "minimatch ReDoS via repeated wildcards. Used internally by @angular-devkit for glob matching during build. An attacker would need to control build inputs. Fix: Angular 21.",
+    "GHSA-34x7-hfp2-rc4v": "minimatch ReDoS via GLOBSTAR segments. Same profile as GHSA-38r7-794h-5758. Fix: Angular 21.",
+    "GHSA-23c5-xmqv-rm74": "minimatch ReDoS via nested *() extglobs. Same profile. Fix: Angular 21.",
+
+    "GHSA-9jgg-88mc-972h": "serialize-javascript RCE via RegExp.flags (webpack plugin dep). Build-time only; only triggered by malicious serialized data in webpack config. Fix: Angular 21.",
+    "GHSA-8qq5-rm4j-mr97": "serialize-javascript CPU exhaustion via crafted array-like objects. Same profile. Fix: Angular 21.",
+
+    "GHSA-7r86-cg39-jmmj": "node-tar path traversal via hardlink escape. Used by npm/node-gyp during `npm install` in CI. Risk window: install phase only. Mitigated by pinned lockfile and `npm ci`. Fix: Angular 21.",
+    "GHSA-r6q2-hw4h-h46w": "node-tar symlink poisoning via drive-relative linkpath. Same profile. Fix: Angular 21.",
+    "GHSA-2g4f-4pwh-qvx6": "node-tar hardlink path traversal (macOS APFS race). Same profile. Fix: Angular 21.",
+    "GHSA-wr3j-pwj9-hqq6": "node-tar symlink path traversal. Same profile. Fix: Angular 21.",
+    "GHSA-79cf-xcqc-c78w": "node-tar arbitrary file overwrite via symlink chain. Same profile. Fix: Angular 21.",
+
+    "GHSA-qj8w-gfj5-8c6v": "copy-webpack-plugin path injection. Build-time only. Fix: Angular 21.",
+    "GHSA-968p-4wvh-cqc8": "ajv ReDoS via $data option. Used by webpack schema validation at build time. Fix: Angular 21.",
+    "GHSA-5c6j-r48x-rmvq": "@angular-devkit/schematics code execution via unsafe template rendering. Only triggered if running untrusted schematic code. Fix: Angular 21.",
+    "GHSA-vpq2-c234-7xj6": "@babel/plugin-transform-modules-systemjs arbitrary code execution. Build-time only; same profile as @babel/traverse (already resolved). Fix: Angular 21."
+  }
+}
