@@ -4,6 +4,8 @@ import {
   safeCallback,
   DEFAULT_RETRY_OPTIONS,
   BEACON_CHUNK_EVENTS,
+  LOG_PREFIX,
+  errorToMeta,
   RetryOptions,
 } from './resilience';
 
@@ -11,6 +13,79 @@ import {
 const _: RetryOptions = DEFAULT_RETRY_OPTIONS; void _;
 
 describe('resilience helpers', () => {
+
+  // ── LOG_PREFIX ─────────────────────────────────────────────────────────────
+
+  describe('LOG_PREFIX', () => {
+    it('is the string "[telemetry]"', () => {
+      expect(LOG_PREFIX).toBe('[telemetry]');
+    });
+
+    it('is a non-empty string', () => {
+      expect(typeof LOG_PREFIX).toBe('string');
+      expect(LOG_PREFIX.length).toBeGreaterThan(0);
+    });
+  });
+
+  // ── errorToMeta ────────────────────────────────────────────────────────────
+
+  describe('errorToMeta', () => {
+    it('extracts name and message from an Error instance', () => {
+      const err = new Error('something broke');
+      const meta = errorToMeta(err);
+      expect(meta.name).toBe('Error');
+      expect(meta.message).toBe('something broke');
+    });
+
+    it('uses the subclass name for Error subclasses', () => {
+      const err = new TypeError('bad type');
+      expect(errorToMeta(err).name).toBe('TypeError');
+    });
+
+    it('preserves a custom error name', () => {
+      const err = new Error('custom');
+      err.name = 'MyDomainError';
+      expect(errorToMeta(err).name).toBe('MyDomainError');
+    });
+
+    it('returns UnknownError for a thrown string', () => {
+      expect(errorToMeta('oops').name).toBe('UnknownError');
+    });
+
+    it('stringifies a thrown string as the message', () => {
+      expect(errorToMeta('oops').message).toBe('oops');
+    });
+
+    it('returns UnknownError for a thrown number', () => {
+      const meta = errorToMeta(42);
+      expect(meta.name).toBe('UnknownError');
+      expect(meta.message).toBe('42');
+    });
+
+    it('returns UnknownError for null', () => {
+      const meta = errorToMeta(null);
+      expect(meta.name).toBe('UnknownError');
+      expect(meta.message).toBe('null');
+    });
+
+    it('returns UnknownError for undefined', () => {
+      const meta = errorToMeta(undefined);
+      expect(meta.name).toBe('UnknownError');
+      expect(meta.message).toBe('undefined');
+    });
+
+    it('returns UnknownError for a plain object', () => {
+      const meta = errorToMeta({ code: 404 });
+      expect(meta.name).toBe('UnknownError');
+      expect(meta.message).toBe('[object Object]');
+    });
+
+    it('returns immutable-shaped result (readonly contract)', () => {
+      // Verifies the return type is usable where ErrorMeta is expected
+      const meta = errorToMeta(new Error('x'));
+      expect(meta).toEqual({ name: jasmine.any(String), message: jasmine.any(String) });
+    });
+  });
 
   // ── chunkArray ──────────────────────────────────────────────────────────
 
@@ -165,7 +240,7 @@ describe('resilience helpers', () => {
       const spy = spyOn(console, 'error');
       const wrapped = safeCallback((_n: number) => { throw new Error('silent-boom'); });
       wrapped(0);
-      expect(spy).toHaveBeenCalledWith('[telemetry] observer error', jasmine.any(Error));
+      expect(spy).toHaveBeenCalledWith('[telemetry]', 'observer error', jasmine.any(Error));
     });
 
     it('does not call onError when the wrapped function succeeds', () => {

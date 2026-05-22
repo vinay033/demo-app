@@ -42,7 +42,10 @@ describe('TelemetryService.flush() — failure scenarios', () => {
 
       expect(ok).toBeFalse();
       expect(navigator.sendBeacon).not.toHaveBeenCalled();
-      expect(console.warn).toHaveBeenCalledWith(jasmine.stringContaining('empty URL'));
+      expect(console.warn).toHaveBeenCalledWith(
+        jasmine.stringContaining('[telemetry]'),
+        jasmine.stringContaining('empty URL'),
+      );
     });
 
     it('retains all buffered events after an empty-URL flush', () => {
@@ -121,7 +124,8 @@ describe('TelemetryService.flush() — failure scenarios', () => {
 
       expect(console.error).toHaveBeenCalledWith(
         jasmine.stringContaining('[telemetry]'),
-        jasmine.anything(),
+        jasmine.stringContaining('sendBeacon threw'),
+        jasmine.any(Error),
       );
     });
   });

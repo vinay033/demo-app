@@ -31,6 +31,7 @@ import {
   chunkArray,
   scheduleBeaconRetry,
   BEACON_CHUNK_EVENTS,
+  LOG_PREFIX,
   RetryOptions,
 } from './resilience';
 
@@ -81,7 +82,7 @@ export class TelemetryService {
   flush(url: string, retryOptions?: RetryOptions): boolean {
     // Guard: empty URL — sendBeacon would throw TypeError
     if (!url) {
-      console.warn('[telemetry] flush() called with empty URL — skipped');
+      console.warn(LOG_PREFIX, 'flush() called with empty URL — skipped');
       return false;
     }
 
@@ -109,7 +110,7 @@ export class TelemetryService {
       } catch (err) {
         // sendBeacon can throw TypeError for malformed URLs or if the browser
         // rejects the call entirely. Treat as a permanent failure for this chunk.
-        console.error('[telemetry] sendBeacon threw — flush aborted', err);
+        console.error(LOG_PREFIX, 'sendBeacon threw — flush aborted', err);
         allSent = false;
         break;
       }
@@ -172,6 +173,6 @@ export class TelemetryService {
       ? ' ' + Object.entries(event.tags).map(([k, v]) => `${k}=${v}`).join(' ')
       : '';
     const unit = event.type === 'timing' ? 'ms' : '';
-    console.log(`[telemetry] ${event.type} ${event.name}=${event.value}${unit}${tagStr}`);
+    console.log(`${LOG_PREFIX} ${event.type} ${event.name}=${event.value}${unit}${tagStr}`);
   }
 }

@@ -11,14 +11,14 @@
 
 import { ErrorHandler, Injectable } from '@angular/core';
 import { TelemetryService } from './telemetry.service';
+import { errorToMeta } from './resilience';
 
 @Injectable()
 export class TelemetryErrorHandler implements ErrorHandler {
   constructor(private readonly telemetry: TelemetryService) {}
 
   handleError(error: unknown): void {
-    const name = error instanceof Error ? error.name : 'UnknownError';
-    const message = error instanceof Error ? error.message : String(error);
+    const { name, message } = errorToMeta(error);
 
     this.telemetry.counter('error.unhandled', 1, {
       error_name: name,

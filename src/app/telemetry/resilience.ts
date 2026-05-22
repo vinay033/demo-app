@@ -1,8 +1,9 @@
 /**
  * resilience.ts — lightweight resilience utilities for the telemetry module.
  *
- * Three helpers are exported:
- *
+ * Exports:
+ *   LOG_PREFIX             — shared console prefix '[telemetry]'
+ *   errorToMeta()          — safely extracts name/message from any thrown value
  *   chunkArray<T>          — splits an array into fixed-size batches
  *   scheduleBeaconRetry    — retries a failed sendBeacon call with exponential backoff
  *   safeCallback<T>        — wraps a callback so observer-context exceptions are caught
@@ -27,7 +28,28 @@ export interface RetryOptions {
   readonly maxDelayMs: number;
 }
 
+/** Structured metadata extracted from a thrown value by {@link errorToMeta}. */
+export interface ErrorMeta {
+  /** `Error.name` when the thrown value is an Error; otherwise `'UnknownError'`. */
+  readonly name: string;
+  /**
+   * `Error.message` when the thrown value is an Error; otherwise the result of
+   * `String(value)`. Callers should truncate before storing in tag values.
+   */
+  readonly message: string;
+}
+
 // ── Constants ──────────────────────────────────────────────────────────────
+
+/**
+ * Shared console log prefix for all telemetry module output.
+ * Using a constant means a single edit renames it everywhere.
+ *
+ * @example
+ *   console.error(LOG_PREFIX, 'sendBeacon failed');
+ *   // → '[telemetry] sendBeacon failed'
+ */
+export const LOG_PREFIX = '[telemetry]';
 
 /**
  * Maximum events per sendBeacon batch.
@@ -43,6 +65,28 @@ export const DEFAULT_RETRY_OPTIONS: Readonly<RetryOptions> = {
   baseDelayMs: 1_000,
   maxDelayMs: 30_000,
 };
+
+// ── errorToMeta ────────────────────────────────────────────────────────────
+
+/**
+ * Safely extracts a `name` and `message` from any thrown value.
+ *
+ * TypeScript's `catch (err)` binds `unknown`, so callers cannot safely access
+ * `.name` or `.message` without a runtime check. This helper centralises that
+ * check so every error-reporting site has a consistent, test-covered extraction.
+ *
+ * @example
+ *   try { ... } catch (err) {
+ *     const { name, message } = errorToMeta(err);
+ *     telemetry.counter('error.unhandled', 1, { error_name: name, error_message: message.slice(0, 120) });
+ *   }
+ */
+export function errorToMeta(error: unknown): ErrorMeta {
+  if (error instanceof Error) {
+    return { name: error.name, message: error.message };
+  }
+  return { name: 'UnknownError', message: String(error) };
+}
 
 // ── chunkArray ─────────────────────────────────────────────────────────────
 
@@ -103,7 +147,7 @@ export function scheduleBeaconRetry(
     } catch {
       // sendBeacon threw during a retry (e.g. URL became invalid, quota exceeded).
       // Stop the retry chain — data is preserved in the ring buffer for the next flush.
-      console.error('[telemetry] sendBeacon threw during retry — stopping retry chain');
+      console.error(LOG_PREFIX, 'sendBeacon threw during retry — stopping retry chain');
       return;
     }
     if (!ok) {
@@ -131,7 +175,7 @@ export function scheduleBeaconRetry(
  */
 export function safeCallback<T>(
   fn: (arg: T) => void,
-  onError: (err: unknown) => void = (err) => console.error('[telemetry] observer error', err),
+  onError: (err: unknown) => void = (err) => console.error(LOG_PREFIX, 'observer error', err),
 ): (arg: T) => void {
   return (arg: T): void => {
     try {
