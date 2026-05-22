@@ -1,6 +1,10 @@
-# Telemetry Observability Guide
+# Telemetry Subsystem — Developer Guide
 
-How to view, query, and extend the instrumentation added in this repo.
+> **Doc-with-code policy:** This file must be updated in the same PR as any
+> change to `src/app/telemetry/`. See the [extension guide](#extending-the-instrumentation)
+> before adding new metrics.
+
+How to view, query, extend, and safely operate the telemetry instrumentation in this repo.
 
 ---
 
@@ -128,38 +132,101 @@ Expected output (abbreviated):
 
 ---
 
+## Configuration
+
+Both flags live in the `environment.*` files:
+
+| Key | Dev default | Prod default | Effect |
+|---|---|---|---|
+| `enableTelemetry` | `true` | `true` | Gates all telemetry providers in `AppModule` |
+| `telemetryEndpoint` | `''` (empty) | `''` (**must set**) | URL passed to `flush()`; empty → flush no-ops silently |
+
+### Wire a real endpoint (production)
+
+Set `telemetryEndpoint` in `src/environments/environment.prod.ts`:
+
+```typescript
+// src/environments/environment.prod.ts
+export const environment = {
+  production: true,
+  enableTelemetry: true,
+  telemetryEndpoint: 'https://ingest.example.com/metrics',  // ← set this
+};
+```
+
+> **Risk:** If you deploy with `telemetryEndpoint: ''`, events accumulate in the
+> ring buffer and are silently dropped when the page closes. No error is surfaced.
+> Always validate this key before deploying — the contract spec
+> (`src/environments/environment.contract.spec.ts`) will fail if the key is removed.
+
+### Disable telemetry entirely
+
+```typescript
+// src/environments/environment.ts  (or environment.prod.ts)
+enableTelemetry: false,
+```
+
+When `false`, none of the telemetry providers are registered. `TelemetryService`
+itself is not provided and Angular will throw if anything attempts to inject it.
+
+---
+
+## Auto-flush lifecycle (TelemetryFlushService)
+
+`TelemetryFlushService` is provided automatically when `enableTelemetry` is `true`.
+It listens to two browser lifecycle events and calls `flush(environment.telemetryEndpoint)`:
+
+| Event | Why |
+|---|---|
+| `window:pagehide` | Most reliable signal that the page is unloading (back/forward cache aware) |
+| `document:visibilitychange → hidden` | Covers background-tab close (pagehide may not fire) |
+
+**You do not need to wire flush() manually** — the service handles it.
+
+> **Risk: SSR / non-browser environments.** `TelemetryFlushService` accesses
+> `window` and `document` in its constructor. If rendered server-side (Angular
+> Universal), wrap the service registration in `isPlatformBrowser()` or it will
+> throw `ReferenceError: window is not defined`.
+
+```typescript
+// Safe SSR pattern (if Universal is added later):
+import { isPlatformBrowser } from '@angular/common';
+import { PLATFORM_ID } from '@angular/core';
+
+// In AppModule providers:
+...(isFlagEnabled('enableTelemetry') && isPlatformBrowser(inject(PLATFORM_ID))
+    ? [TelemetryFlushService]
+    : []),
+```
+
+---
+
 ## Viewing metrics in staging / production
 
 The app ships a `TelemetryService.flush(url)` method that sends the entire
 in-memory buffer to any HTTP endpoint as **newline-delimited JSON (NDJSON)**
-using `navigator.sendBeacon`.
+using `navigator.sendBeacon`. `TelemetryFlushService` calls this automatically on
+page hide/visibility change — you only need to set the endpoint URL (see [Configuration](#configuration)).
 
-### Wire a real collector (three options)
+### NDJSON payload format
 
-#### Option A — Generic NDJSON endpoint (zero extra deps)
-
-Call `flush()` on page hide so no events are lost on navigation/close:
-
-```typescript
-// app.component.ts
-import { TelemetryService } from './telemetry/telemetry.service';
-
-export class AppComponent implements OnInit {
-  constructor(private telemetry: TelemetryService) {}
-
-  @HostListener('window:pagehide')
-  onPageHide(): void {
-    this.telemetry.flush('https://ingest.example.com/metrics');
-  }
-}
-```
-
-Each line of the NDJSON body is one event object:
+Each line of the beacon body is one event object:
 
 ```json
 {"type":"timing","name":"route.navigation_ms","value":87,"tags":{"url":"/products","nav_id":"6051"},"timestamp":1716087060123}
 {"type":"counter","name":"error.unhandled","value":1,"tags":{"error_name":"TypeError"},"timestamp":1716087061002}
 ```
+
+### Wire a real collector (backend options)
+
+#### Option A — Generic NDJSON endpoint (zero extra deps)
+
+Set `environment.telemetryEndpoint` (see [Configuration](#configuration)).
+The flush lifecycle is already wired via `TelemetryFlushService`.
+
+> **Stale-doc warning:** Earlier versions of this guide showed wiring `flush()`
+> manually in `AppComponent`. That approach is superseded — **remove any manual
+> `flush()` calls from `AppComponent`** to avoid double-flushing.
 
 #### Option B — Sentry
 
@@ -206,17 +273,168 @@ View in: **Jaeger / Grafana Tempo / Honeycomb** — any OTel-compatible backend.
 
 ## Extending the instrumentation
 
-1. **Add a new metric** — call `this.telemetry.counter/timing/gauge(name, value, tags)` anywhere
-   that has access to `TelemetryService` via Angular DI.
+### Add a new metric (inline)
 
-2. **Change the backend** — edit `TelemetryService._emit()`. The rest of the codebase
-   is unaffected; all instrumentation points call `_emit` through the three public methods.
+Call `this.telemetry.counter/timing/gauge(name, value, tags)` anywhere that
+has access to `TelemetryService` via Angular DI:
 
-3. **Add a tag** — pass a new key in the `tags` object; it flows to the Performance API
-   mark name, the console line, and the NDJSON payload automatically.
+```typescript
+// Any Angular service or component:
+constructor(private readonly telemetry: TelemetryService) {}
 
-4. **Lower the ring-buffer cap** — change `MAX_EVENTS` in `telemetry.service.ts`
-   (currently 500). Lower values reduce memory at the cost of losing early events.
+this.telemetry.timing('checkout.payment_ms', durationMs, { gateway: 'stripe' });
+this.telemetry.counter('cart.item_added', 1, { category });
+this.telemetry.gauge('session.cart_value', totalCents);
+```
+
+### Add a new telemetry service (subsystem instrumentation)
+
+For a whole subsystem, create a dedicated service following the pattern of
+`RouterTelemetryService` (`src/app/telemetry/router-telemetry.service.ts`):
+
+```typescript
+// src/app/telemetry/my-feature-telemetry.service.ts
+import { Injectable, OnDestroy } from '@angular/core';
+import { TelemetryService } from './telemetry.service';
+
+@Injectable({ providedIn: 'root' })
+export class MyFeatureTelemetryService implements OnDestroy {
+  constructor(private readonly telemetry: TelemetryService) {
+    // wire subscriptions / observers here
+  }
+
+  ngOnDestroy(): void {
+    // unsubscribe to avoid memory leaks
+  }
+}
+```
+
+Then add a spec file `my-feature-telemetry.service.spec.ts` and update this doc's
+[File map](#file-map) in the same PR.
+
+> **Risk:** Forgetting `ngOnDestroy` / unsubscribing will cause ghost subscriptions
+> in tests that reuse the Angular `TestBed`. Always implement `OnDestroy`.
+
+### Change the backend
+
+Edit `TelemetryService._emit()` in `src/app/telemetry/telemetry.service.ts`.
+All instrumentation paths call `_emit` through the three public methods —
+no other files need changing.
+
+> **Risk:** `_emit()` is called synchronously on every metric. Adding a slow or
+> async operation here will block the calling code. Keep `_emit()` O(1) and
+> side-effect free except for the Performance API calls and console output already present.
+
+### Add a tag
+
+Pass a new key in the `tags` object. Tags flow automatically to:
+- the Performance API mark name (`telemetry:<type>:<name>|<tag>:<value>`)
+- the console log line
+- the NDJSON flush payload
+
+### Adjust the ring-buffer cap
+
+Change `MAX_EVENTS` in `src/app/telemetry/telemetry.service.ts` (currently **500**).
+
+| `MAX_EVENTS` | Memory ~(at 150 B/event) | Trade-off |
+|---|---|---|
+| 500 (default) | ~75 KB peak | Sufficient for most SPAs |
+| 200 | ~30 KB | Low-memory or mobile-first apps |
+| 1000 | ~150 KB | High-throughput apps with many metrics |
+
+> **Risk:** Raising `MAX_EVENTS` above 500 without also lowering `BEACON_CHUNK_EVENTS`
+> may produce beacon payloads that approach the browser's ~64 KB limit per chunk.
+> Keep `MAX_EVENTS ≤ BEACON_CHUNK_EVENTS × 3` as a conservative rule.
+
+### Use `safeCallback` for observer-context code
+
+Wrap any callback registered with `PerformanceObserver`, `IntersectionObserver`, or
+similar browser APIs in `safeCallback` so exceptions are caught and routed to the
+Angular `ErrorHandler` instead of being silently swallowed:
+
+```typescript
+import { safeCallback } from './resilience';
+
+// Without safeCallback: exceptions are lost silently
+observer.observe({ type: 'paint', buffered: true });
+
+// With safeCallback: exceptions reach TelemetryErrorHandler
+onLCP(safeCallback(
+  (metric) => this.telemetry.timing('web_vitals.lcp', metric.value),
+  (err) => this.errorHandler.handleError(err),
+));
+```
+
+### Use `errorToMeta` when recording error tags
+
+When recording error information as metric tags, always use `errorToMeta` from
+`src/app/telemetry/resilience.ts`. It safely handles non-Error thrown values
+(strings, numbers, null) that would otherwise produce a confusing `[object Object]` tag:
+
+```typescript
+import { errorToMeta } from './resilience';
+
+try { /* ... */ } catch (err) {
+  const { name, message } = errorToMeta(err);
+  this.telemetry.counter('my_feature.error', 1, {
+    error_name: name,
+    error_message: message.slice(0, 120),
+  });
+}
+```
+
+---
+
+## Resilience & reliability
+
+### Retry with exponential backoff
+
+When `navigator.sendBeacon` returns `false` (browser queue full), the telemetry
+service schedules retries via `scheduleBeaconRetry` (`src/app/telemetry/resilience.ts`).
+
+| Parameter | Default | Location | When to change |
+|---|---|---|---|
+| `maxAttempts` | `3` | `DEFAULT_RETRY_OPTIONS` in `resilience.ts` | Raise for unreliable networks; lower for battery-sensitive mobile |
+| `baseDelayMs` | `1 000` ms | `DEFAULT_RETRY_OPTIONS` | Raise if your backend has a higher rate-limit window |
+| `maxDelayMs` | `30 000` ms | `DEFAULT_RETRY_OPTIONS` | Lower for low-priority apps that should give up sooner |
+| `BEACON_CHUNK_EVENTS` | `200` events | `resilience.ts` | Lower if observing 413/payload-too-large errors at the collector |
+
+Backoff formula: `delay = min(baseDelayMs × 2^(attempt-1), maxDelayMs)`
+
+```
+attempt 1 → 1 000 ms
+attempt 2 → 2 000 ms
+attempt 3 → 4 000 ms  (then gives up)
+```
+
+### Chunked delivery
+
+The ring buffer is flushed in chunks of `BEACON_CHUNK_EVENTS` (200) events per beacon
+call. This keeps each payload under ~30 KB, well within the browser's ~64 KB limit.
+
+### sendBeacon throw guard
+
+If `sendBeacon` throws (e.g., invalid URL, cross-origin restriction), the exception
+is caught and logged via `console.error`. Retries are not attempted on a throw
+(only on `sendBeacon` returning `false`).
+
+> **Risk:** A throw from `sendBeacon` means the chunk is permanently lost. Monitor
+> `[telemetry] sendBeacon threw` in your error tracking system as an alert that
+> events are being dropped.
+
+---
+
+## Risk notes
+
+| Risk | Severity | Mitigation |
+|---|---|---|
+| `telemetryEndpoint` left empty in prod | **High** — silent data loss | Validate in CI; env contract spec catches removal but not empty-string |
+| SSR / Angular Universal: `window` not defined | **High** — server crash | Guard `TelemetryFlushService` with `isPlatformBrowser()` before registering |
+| `_emit()` blocking the call site | **Medium** — UX jank | Keep `_emit()` synchronous and O(1); never add HTTP calls inside it |
+| Ghost subscriptions from missing `ngOnDestroy` | **Medium** — test pollution | All telemetry services implement `OnDestroy`; new services must too |
+| `MAX_EVENTS` too high → oversized beacon | **Low** — 413 at collector | Keep `MAX_EVENTS ≤ BEACON_CHUNK_EVENTS × 3` |
+| Feature flag `enableTelemetry: false` removes all providers | **Low** — DI crash if misused | Never inject `TelemetryService` from code outside `enableTelemetry` guard |
+| Sensitive data in tags | **Medium** — PII leak | Never put user-identifying data (email, userId) in tag values; tags land in NDJSON payload and browser performance marks |
 
 ---
 
@@ -224,14 +442,49 @@ View in: **Jaeger / Grafana Tempo / Honeycomb** — any OTel-compatible backend.
 
 ```
 src/app/telemetry/
-├── telemetry.service.ts          Central sink — ring buffer, Performance API, flush()
-├── telemetry-error-handler.ts    Replaces Angular ErrorHandler → error.unhandled counter
-├── router-telemetry.service.ts   Subscribes to Router events → route.navigation_ms timing
-├── web-vitals.service.ts         Wires web-vitals on*() → web_vitals.* metrics
-├── telemetry.service.spec.ts     12 specs: counter/timing/gauge, ring buffer, flush()
-├── telemetry-error-handler.spec.ts   6 specs
-├── router-telemetry.service.spec.ts  6 specs
-└── web-vitals.service.spec.ts        3 specs
+│
+│  ── Core services ──────────────────────────────────────────────────────────
+├── telemetry.service.ts              Central sink — ring buffer (MAX_EVENTS=500),
+│                                     Performance API marks/measures, flush()
+├── telemetry-error-handler.ts        Replaces Angular ErrorHandler → error.unhandled
+├── router-telemetry.service.ts       Router events → route.navigation_ms timing
+├── web-vitals.service.ts             web-vitals on*() → web_vitals.* metrics
+├── telemetry-flush.service.ts        Page-lifecycle flush (pagehide + visibilitychange)
+│                                     reads environment.telemetryEndpoint automatically
+│
+│  ── Shared utilities ───────────────────────────────────────────────────────
+└── resilience.ts                     LOG_PREFIX, errorToMeta(), chunkArray(),
+                                      scheduleBeaconRetry(), safeCallback()
+                                      No Angular DI — safe to import from any context
+
+src/app/telemetry/  (specs)
+├── telemetry.service.spec.ts         17 specs: counter/timing/gauge, ring buffer, flush()
+├── telemetry-error-handler.spec.ts    6 specs
+├── router-telemetry.service.spec.ts   8 specs
+├── web-vitals.service.spec.ts         6 specs
+├── telemetry-flush.service.spec.ts    7 specs: lifecycle flush, endpoint passthrough
+├── resilience.spec.ts                31 specs: LOG_PREFIX, errorToMeta, chunkArray,
+│                                              scheduleBeaconRetry, safeCallback
+└── resilience-failures.spec.ts       27 specs: sendBeacon throw, SSR, partial chunks,
+                                                retry exhaustion, safeCallback edge cases
+
 scripts/
-└── verify-telemetry.mjs          Local verification: npm run verify:telemetry
+└── verify-telemetry.mjs              Local verification: npm run verify:telemetry
+
+src/environments/
+├── environment.ts                    telemetryEndpoint: '', enableTelemetry: true
+└── environment.prod.ts               telemetryEndpoint: '' (must be set before deploy)
+```
+
+### Dependency graph (simplified)
+
+```
+AppModule
+  └─► (enableTelemetry flag)
+        ├─► TelemetryService          ← all services inject this
+        ├─► TelemetryErrorHandler     ─► errorToMeta()  ─► resilience.ts
+        ├─► RouterTelemetryService
+        ├─► WebVitalsService          ─► safeCallback() ─► resilience.ts
+        └─► TelemetryFlushService     reads environment.telemetryEndpoint
+                                      calls TelemetryService.flush()
 ```
