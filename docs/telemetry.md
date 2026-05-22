@@ -458,7 +458,11 @@ src/app/telemetry/
                                       No Angular DI — safe to import from any context
 
 src/app/telemetry/  (specs)
-├── telemetry.service.spec.ts         17 specs: counter/timing/gauge, ring buffer, flush()
+├── telemetry.service.contract.spec.ts 25 specs: public API contract — event shape,
+│                                               counter/timing/gauge, flush() return values
+│                                               UPDATE THIS when the public API changes
+├── telemetry.service.spec.ts         17 specs: internal ring buffer, Performance API,
+│                                               flush() resilience implementation
 ├── telemetry-error-handler.spec.ts    6 specs
 ├── router-telemetry.service.spec.ts   8 specs
 ├── web-vitals.service.spec.ts         6 specs
@@ -468,10 +472,17 @@ src/app/telemetry/  (specs)
 └── resilience-failures.spec.ts       27 specs: sendBeacon throw, SSR, partial chunks,
                                                 retry exhaustion, safeCallback edge cases
 
+projects/sub-app1/src/app/
+└── store.contract.spec.ts            13 specs: AppState schema, public Redux API
+                                                (getState, subscribe, dispatch, unsubscribe)
+                                                UPDATE THIS when the store API changes
+
 scripts/
 └── verify-telemetry.mjs              Local verification: npm run verify:telemetry
 
 src/environments/
+├── environment.contract.spec.ts      15 specs: key allowlist, type guards, dev/prod parity
+│                                               UPDATE THIS when an env key is added/removed
 ├── environment.ts                    telemetryEndpoint: '', enableTelemetry: true
 └── environment.prod.ts               telemetryEndpoint: '' (must be set before deploy)
 ```
@@ -488,3 +499,58 @@ AppModule
         └─► TelemetryFlushService     reads environment.telemetryEndpoint
                                       calls TelemetryService.flush()
 ```
+
+---
+
+## Contract test update process
+
+Three contract boundaries are actively guarded by specs. Follow this checklist
+whenever you change the code at one of these boundaries:
+
+### 1 · `TelemetryService` public API (`telemetry.service.contract.spec.ts`)
+
+Triggered by: changes to `counter()`, `timing()`, `gauge()`, `flush()` signatures,
+`TelemetryEvent` interface fields, or the `events` buffer visibility.
+
+```
+1. Change the public API in telemetry.service.ts
+2. Update the affected 'it' blocks in telemetry.service.contract.spec.ts
+3. Update the "Extending" and "File map" sections in docs/telemetry.md
+4. ng test demo-app --no-watch --browsers=ChromeHeadlessCI  →  must be green
+5. Review all 5 caller services for call-site impact
+```
+
+### 2 · Redux store API (`store.contract.spec.ts`)
+
+Triggered by: changes to `AppState` shape, `rootReducer`, store enhancers,
+or the Redux `Store` API surface used by `StoreListenerService`.
+
+```
+1. Change store.ts / rootReducer
+2. Update INITIAL_STATE_SCHEMA (add properties/required entries for new keys)
+3. Update the 'it' blocks for any API surface change
+4. ng test sub-app1 --no-watch --browsers=ChromeHeadlessCI  →  must be green
+5. Treat this file as the breaking-change signal for all store consumers
+```
+
+### 3 · Environment object shape (`environment.contract.spec.ts`)
+
+Triggered by: adding/removing keys in `environment.ts` or `environment.prod.ts`,
+or adding/removing feature flags in `featureFlags`.
+
+```
+1. Add or remove the key in both environment.ts and environment.prod.ts
+2. Update ALLOWED_KEYS (and ALLOWED_FLAGS if a flag changed)
+3. ng test demo-app --no-watch --browsers=ChromeHeadlessCI  →  must be green
+4. Check docs/feature-flags.md if a flag changed
+```
+
+### Running all contract tests at once
+
+```bash
+ng test demo-app --no-watch --browsers=ChromeHeadlessCI
+ng test sub-app1 --no-watch --browsers=ChromeHeadlessCI
+```
+
+Both must be green before merging any PR that touches a guarded boundary.
+
