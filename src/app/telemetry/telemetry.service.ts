@@ -146,8 +146,14 @@ export class TelemetryService {
     // Mark the event so it appears in DevTools > Performance > User Timings.
     // Tag values are encoded into the mark name as key:value pairs so they
     // survive the string-only constraint of the Performance API.
-    const tagSuffix = event.tags
-      ? '|' + Object.entries(event.tags).map(([k, v]) => `${k}:${v}`).join(',')
+    //
+    // Perf note: Object.entries(event.tags) is computed once here and reused
+    // for both the Performance API mark name and the console log string below.
+    // Previously it was computed twice, adding a redundant O(t) allocation on
+    // every tagged event (where t = number of tags).
+    const tagEntries = event.tags ? Object.entries(event.tags) : null;
+    const tagSuffix = tagEntries
+      ? '|' + tagEntries.map(([k, v]) => `${k}:${v}`).join(',')
       : '';
     const markName = `telemetry:${event.type}:${event.name}${tagSuffix}`;
 
@@ -169,8 +175,8 @@ export class TelemetryService {
     }
 
     // ── Console output (dev-mode visibility) ──────────────────────────────
-    const tagStr = event.tags
-      ? ' ' + Object.entries(event.tags).map(([k, v]) => `${k}=${v}`).join(' ')
+    const tagStr = tagEntries
+      ? ' ' + tagEntries.map(([k, v]) => `${k}=${v}`).join(' ')
       : '';
     const unit = event.type === 'timing' ? 'ms' : '';
     console.log(`${LOG_PREFIX} ${event.type} ${event.name}=${event.value}${unit}${tagStr}`);
