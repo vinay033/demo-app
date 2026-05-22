@@ -123,6 +123,50 @@ graph LR
 
 ---
 
+
+---
+
+## Telemetry Subsystem — Dependency Graph
+
+> **Auto-generated** by `scripts/gen-architecture.mjs`.
+> Run `npm run gen:architecture` to refresh after changing `src/app/telemetry/`.
+
+<!-- telemetry-diagram -->
+```mermaid
+graph TD
+    subgraph Telemetry ["src/app/telemetry/ — Telemetry Subsystem"]
+        resilience_ts(["Resilience\n(resilience.ts)"])
+        router_telemetry_service_ts["Router Telemetry.Svc\n(router-telemetry.service.ts)"]
+        telemetry_error_handler_ts["Telemetry Error Hdlr\n(telemetry-error-handler.ts)"]
+        telemetry_flush_service_ts["Telemetry Flush.Svc\n(telemetry-flush.service.ts)"]
+        telemetry_service_ts["Telemetry.Svc\n(telemetry.service.ts)"]
+        web_vitals_service_ts["Web Vitals.Svc\n(web-vitals.service.ts)"]
+        router_telemetry_service_ts --> telemetry_service_ts
+        telemetry_error_handler_ts --> telemetry_service_ts
+        telemetry_flush_service_ts --> telemetry_service_ts
+        telemetry_service_ts --> resilience_ts
+        web_vitals_service_ts --> telemetry_service_ts
+        web_vitals_service_ts --> resilience_ts
+    end
+
+    ext_web_vitals(["web-vitals\n(external)"]):::external
+    web_vitals_service_ts -.->|uses| ext_web_vitals
+
+    env["environment.ts\n(telemetryEndpoint)"]:::config
+    telemetry_flush_service_ts -->|reads endpoint| env
+
+    AppModule["AppModule\n(app.module.ts)"]:::caller
+    AppModule -->|provides| router_telemetry_service_ts
+    AppModule -->|provides| telemetry_error_handler_ts
+    AppModule -->|provides| telemetry_flush_service_ts
+    AppModule -->|provides| web_vitals_service_ts
+
+    classDef external fill:#f5f0e8,stroke:#c9a84c,color:#333
+    classDef config fill:#e8f0fe,stroke:#4a86e8,color:#333
+    classDef caller fill:#e8f5e9,stroke:#43a047,color:#333
+```
+<!-- /telemetry-diagram -->
+
 ## Known Issues & Gaps
 
 | # | Issue | Location |
@@ -131,3 +175,14 @@ graph LR
 | 2 | Host `AppModule` declares `[Provider]` (react-redux) in `declarations` — should be in `imports` or `providers` | `src/app/app.module.ts` |
 | 3 | Redux store files are empty | `projects/sub-app1/store/store.ts`, `store/index.ts` |
 | 4 | `AppRoutingModule` in host has no routes — remotes are not wired for lazy loading | `src/app/app-routing.module.ts` |
+
+---
+
+## Architecture Change Summary
+
+### 2026-05-22 (977e2f9)
+
+**Initial generation** — telemetry subsystem diagram created from scratch.
+
+Nodes discovered: 7
+Dependency edges: 6

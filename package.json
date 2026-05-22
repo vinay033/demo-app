@@ -12,7 +12,8 @@
     "prepare": "husky",
     "verify:telemetry": "node scripts/verify-telemetry.mjs",
     "lint": "eslint src/ projects/ --max-warnings 20",
-    "lint:telemetry": "eslint src/app/telemetry/ --max-warnings 5"
+    "lint:telemetry": "eslint src/app/telemetry/ --max-warnings 5",
+    "gen:architecture": "node scripts/gen-architecture.mjs --summary"
   },
   "private": true,
   "dependencies": {
