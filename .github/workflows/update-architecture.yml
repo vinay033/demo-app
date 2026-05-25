@@ -12,10 +12,17 @@ on:
 permissions:
   contents: read
 
+# Only one regeneration at a time per branch; cancel any queued run if a newer
+# push arrives before the previous run finishes.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   regenerate:
     name: Regenerate telemetry subsystem diagram
     runs-on: ubuntu-latest
+    timeout-minutes: 10   # gen + validate + git push should complete well within 10 min
 
     permissions:
       contents: write
@@ -29,7 +36,8 @@ jobs:
 
       - uses: actions/setup-node@v4
         with:
-          node-version: '18'
+          node-version: '20'   # matches contract-tests.yml for consistency
+          cache: 'npm'         # cache node_modules across runs
 
       - name: Regenerate diagram
         run: node scripts/gen-architecture.mjs --summary

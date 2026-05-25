@@ -24,10 +24,17 @@ on:
 permissions:
   contents: read
 
+# Cancel redundant runs on the same branch/PR to save runner minutes.
+# Never cancel on main — every green commit there is a permanent record.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
+
 jobs:
   contract-tests:
     name: Contract & unit tests (${{ matrix.project.name }} / flags-${{ matrix.flag_mode }})
     runs-on: ubuntu-latest
+    timeout-minutes: 20   # Chrome launch hangs are the most common cause of stuck jobs
 
     strategy:
       fail-fast: false   # run all projects even if one fails
@@ -54,22 +61,45 @@ jobs:
           cache: "npm"
 
       - name: Install dependencies
-        run: npm ci --legacy-peer-deps
+        # Retry up to 3 times — npm ci fails transiently on mirror/network timeouts
+        run: |
+          for attempt in 1 2 3; do
+            npm ci --legacy-peer-deps && break
+            [ $attempt -lt 3 ] && echo "Attempt $attempt failed — retrying in 15s..." && sleep 15
+          done
 
       - name: Install Chrome system libraries (required by karma-chrome-launcher)
+        # Retry once — apt-get mirrors can return 503 on first attempt
         run: |
-          sudo apt-get update -qq
-          sudo apt-get install -y --no-install-recommends \
-            google-chrome-stable \
-            libnss3 libatk1.0-0 libatk-bridge2.0-0 libcups2 \
-            libdrm2 libxkbcommon0 libxcomposite1 libxdamage1 \
-            libxfixes3 libxrandr2 libgbm1 libasound2t64 \
-            libxshmfence1 libglu1-mesa || \
-          sudo apt-get install -y --no-install-recommends \
-            chromium-browser \
-            libnss3 libatk1.0-0 libatk-bridge2.0-0 libcups2 \
-            libdrm2 libxkbcommon0 libxcomposite1 libxdamage1 \
-            libxfixes3 libxrandr2 libgbm1 libasound2t64
+          for attempt in 1 2; do
+            sudo apt-get update -qq && \
+            sudo apt-get install -y --no-install-recommends \
+              google-chrome-stable \
+              libnss3 libatk1.0-0 libatk-bridge2.0-0 libcups2 \
+              libdrm2 libxkbcommon0 libxcomposite1 libxdamage1 \
+              libxfixes3 libxrandr2 libgbm1 libasound2t64 \
+              libxshmfence1 libglu1-mesa && break || \
+            sudo apt-get install -y --no-install-recommends \
+              chromium-browser \
+              libnss3 libatk1.0-0 libatk-bridge2.0-0 libcups2 \
+              libdrm2 libxkbcommon0 libxcomposite1 libxdamage1 \
+              libxfixes3 libxrandr2 libgbm1 libasound2t64 && break
+            [ $attempt -lt 2 ] && echo "Chrome install attempt $attempt failed — retrying in 10s..." && sleep 10
+          done
+
+      - name: Detect Chrome binary path
+        # Exports CHROME_BIN so the Karma step picks up whichever binary was installed
+        run: |
+          CHROME_BIN=$(which google-chrome-stable 2>/dev/null \
+            || which chromium-browser 2>/dev/null \
+            || which chromium 2>/dev/null \
+            || echo "")
+          if [ -z "$CHROME_BIN" ]; then
+            echo "❌ No Chrome/Chromium binary found — test run will fail" >&2
+            exit 1
+          fi
+          echo "CHROME_BIN=$CHROME_BIN" >> "$GITHUB_ENV"
+          echo "Detected Chrome binary: $CHROME_BIN"
 
       - name: TypeScript type-check (${{ matrix.project.name }})
         run: |
@@ -95,8 +125,7 @@ jobs:
           else
             npx ng test ${{ matrix.project.ng_target }} --no-watch --browsers=ChromeHeadlessCI $CONFIG_FLAG 2>&1 | tee test-output.txt
           fi
-        env:
-          CHROME_BIN: /usr/bin/google-chrome-stable
+          # CHROME_BIN is exported by the 'Detect Chrome binary path' step via $GITHUB_ENV
 
       - name: Write per-project coverage to job summary
         if: always()
@@ -168,6 +197,7 @@ jobs:
     runs-on: ubuntu-latest
     needs: contract-tests
     if: always()
+    timeout-minutes: 5
     steps:
       - name: Check matrix result
         run: |
@@ -213,6 +243,7 @@ jobs:
     needs: contract-tests
     if: always() && github.event_name == 'pull_request'
     continue-on-error: true
+    timeout-minutes: 5
     permissions:
       pull-requests: write  # needed to create/edit PR comments
 
@@ -342,6 +373,7 @@ jobs:
     name: Telemetry instrumentation evidence
     runs-on: ubuntu-latest
     continue-on-error: true   # non-blocking: failure never gates merge
+    timeout-minutes: 10
 
     steps:
       - name: Checkout repository
@@ -354,7 +386,12 @@ jobs:
           cache: "npm"
 
       - name: Install production + dev dependencies
-        run: npm ci --legacy-peer-deps
+        # Retry up to 3 times — npm ci fails transiently on mirror/network timeouts
+        run: |
+          for attempt in 1 2 3; do
+            npm ci --legacy-peer-deps && break
+            [ $attempt -lt 3 ] && echo "Attempt $attempt failed — retrying in 15s..." && sleep 15
+          done
 
       - name: Run telemetry verification script
         id: verify

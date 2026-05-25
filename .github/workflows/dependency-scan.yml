@@ -19,10 +19,17 @@ on:
 permissions:
   contents: read
 
+# Cancel redundant scan runs on the same branch/PR.
+# Scheduled runs are never cancelled (ref = 'refs/heads/main' on schedule).
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name != 'schedule' && github.ref != 'refs/heads/main' }}
+
 jobs:
   audit:
     name: npm audit
     runs-on: ubuntu-latest
+    timeout-minutes: 15   # audit + install; protects against npm registry hangs
 
     steps:
       - uses: actions/checkout@v4
@@ -34,7 +41,12 @@ jobs:
           cache: 'npm'
 
       - name: Install dependencies
-        run: npm ci --legacy-peer-deps
+        # Retry up to 3 times — npm ci fails transiently on mirror/network timeouts
+        run: |
+          for attempt in 1 2 3; do
+            npm ci --legacy-peer-deps && break
+            [ $attempt -lt 3 ] && echo "Attempt $attempt failed — retrying in 15s..." && sleep 15
+          done
 
       # ── Full report (informational, never fails the job) ──────────────────
       # Captures the complete audit output including high/moderate/low findings

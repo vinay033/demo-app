@@ -10,6 +10,11 @@ on:
 permissions:
   contents: read
 
+# Cancel redundant lint runs on the same branch/PR.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
+
 # Static analysis is advisory for most rules; only the telemetry strict tier
 # blocks a merge (errors = 0, max-warnings = 4 known Angular-14 patterns).
 
@@ -18,17 +23,23 @@ jobs:
   lint-workspace:
     name: Lint / workspace
     runs-on: ubuntu-latest
+    timeout-minutes: 10   # ESLint parse hangs on large files without a timeout
     continue-on-error: true   # advisory — does not block merge
     steps:
       - uses: actions/checkout@v4
 
       - uses: actions/setup-node@v4
         with:
-          node-version: 18
+          node-version: 20   # matches contract-tests.yml for consistency
           cache: npm
 
       - name: Install dependencies
-        run: npm ci --legacy-peer-deps
+        # Retry up to 3 times — npm ci fails transiently on mirror/network timeouts
+        run: |
+          for attempt in 1 2 3; do
+            npm ci --legacy-peer-deps && break
+            [ $attempt -lt 3 ] && echo "Attempt $attempt failed — retrying in 15s..." && sleep 15
+          done
 
       - name: Run ESLint (baseline, all src)
         id: lint-all
@@ -64,17 +75,23 @@ jobs:
   lint-telemetry-strict:
     name: Lint / telemetry (strict)
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     # continue-on-error is NOT set — zero errors in telemetry is a hard gate
     steps:
       - uses: actions/checkout@v4
 
       - uses: actions/setup-node@v4
         with:
-          node-version: 18
+          node-version: 20   # matches contract-tests.yml for consistency
           cache: npm
 
       - name: Install dependencies
-        run: npm ci --legacy-peer-deps
+        # Retry up to 3 times — npm ci fails transiently on mirror/network timeouts
+        run: |
+          for attempt in 1 2 3; do
+            npm ci --legacy-peer-deps && break
+            [ $attempt -lt 3 ] && echo "Attempt $attempt failed — retrying in 15s..." && sleep 15
+          done
 
       - name: Run strict ESLint on src/app/telemetry/
         id: lint-strict
