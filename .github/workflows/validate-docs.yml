@@ -12,6 +12,10 @@ on:
       - "scripts/validate-diagrams.mjs"
       - ".github/workflows/validate-docs.yml"
 
+# Minimal permissions: diagram validation is read-only. No repo writes needed.
+permissions:
+  contents: read
+
 jobs:
   validate-diagrams:
     name: Mermaid diagram validation

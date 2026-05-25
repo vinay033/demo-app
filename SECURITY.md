@@ -155,3 +155,72 @@ When the underlying package is upgraded and the advisory no longer applies:
 ## Dependency upgrade process
 
 See [`CONTRIBUTING.md § Dependency Upgrade Policy`](./CONTRIBUTING.md#dependency-upgrade-policy) for the full upgrade procedure, including patch/minor/major priority order, the step-by-step recipe, rollback command, and the upgrade log.
+
+---
+
+## Security hygiene controls
+
+The following hygiene controls were added or strengthened on **2026-05-19** as part of a structured security improvement sprint.
+
+### Fix 1 — `.gitignore` secret patterns
+
+**Gap**: The original `.gitignore` had no patterns for credentials, keys, or environment files.  
+**Change**: Added a `# Secrets & credentials` section to `.gitignore` covering: `.env`, `*.env`, `.env.local`, `.env.*.local`, `*.pem`, `*.key`, `*.p12`, `*.pfx`, `*.jks`, `*.keystore`, `service-account*.json`.  
+**Effect**: Git now refuses to track files matching these patterns, preventing accidental secret commits.
+
+To verify the patterns are present run:
+```bash
+node scripts/security-check.mjs
+```
+
+### Fix 2 — `audit-ci.json` threshold raised to `high: true`
+
+**Gap**: The `audit-ci.json` file had `"high": false`. Any new HIGH advisory not yet in the allowlist would **silently pass** CI scans.  
+**Change**: Set `"high": true` in `audit-ci.json`. All current HIGH advisories were already individually allowlisted; this change ensures that any **future** unlisted HIGH advisory will fail CI immediately.  
+**Effect**: CI breaks on any new unlisted HIGH or CRITICAL advisory; only explicitly reviewed and rationale-documented advisories are allowed to pass.
+
+To verify:
+```bash
+npx audit-ci --config audit-ci.json   # should exit 0
+```
+
+### Fix 3 — Explicit `permissions:` blocks in all GitHub Actions workflows
+
+**Gap**: Four workflows (`contract-tests.yml`, `dependency-scan.yml`, `lint.yml`, `validate-docs.yml`) had no `permissions:` block. GitHub's default is `contents: write` for public repos, meaning any step in those workflows could push commits.  
+**Change**: Added `permissions: contents: read` at the top level of each workflow that does not need write access. `update-architecture.yml` retains `contents: write` at the **job** level (it commits the regenerated diagram) but now also declares the top-level default as `read`.  
+**Effect**: All five workflows now follow principle of least privilege.
+
+To verify all workflows have an explicit permissions block:
+```bash
+node scripts/security-check.mjs
+```
+
+### Repeatable hygiene check script
+
+`scripts/security-check.mjs` is a repeatable Node.js scanner that verifies all three hygiene controls above plus the live `audit-ci` gate.
+
+```bash
+node scripts/security-check.mjs   # exits 0 if all checks pass, 1 otherwise
+```
+
+**Checks performed:**
+
+| # | Check | Pass condition |
+|---|---|---|
+| 1 | `audit-ci.json` threshold | `high: true`, `critical: true`, every allowlisted advisory has a rationale entry |
+| 2 | `.gitignore` secret patterns | `.env`, `*.pem`, `*.key`, `*.p12`, `*.pfx` all present |
+| 3 | Workflow `permissions:` blocks | Every `.github/workflows/*.yml` file contains a top-level `permissions:` block |
+| 4 | Live `audit-ci` gate | `npx audit-ci --config audit-ci.json` exits 0 |
+
+The script can be added to a `pre-push` hook or run in CI as an additional hygiene gate.
+
+### Rollback guidance
+
+| Fix | Revert command |
+|---|---|
+| `.gitignore` patterns | `git checkout HEAD~1 -- .gitignore` |
+| `audit-ci.json` threshold | `git checkout HEAD~1 -- audit-ci.json` |
+| Workflow permissions | `git checkout HEAD~1 -- .github/workflows/contract-tests.yml .github/workflows/dependency-scan.yml .github/workflows/lint.yml .github/workflows/update-architecture.yml .github/workflows/validate-docs.yml` |
+
+No functional code was changed; rollback cannot break tests or the build.
+

@@ -6,6 +6,10 @@ on:
   pull_request:
     branches: ['**']
 
+# Minimal permissions: lint is read-only analysis. No repo writes needed.
+permissions:
+  contents: read
+
 # Static analysis is advisory for most rules; only the telemetry strict tier
 # blocks a merge (errors = 0, max-warnings = 4 known Angular-14 patterns).
 

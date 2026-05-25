@@ -20,6 +20,10 @@ on:
       - "tsconfig*.json"
       - ".github/workflows/contract-tests.yml"
 
+# Minimal permissions: test runs are read-only. No repo writes needed.
+permissions:
+  contents: read
+
 jobs:
   contract-tests:
     name: Contract & unit tests (${{ matrix.project.name }} / flags-${{ matrix.flag_mode }})

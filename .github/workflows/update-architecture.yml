@@ -8,6 +8,10 @@ on:
     branches-ignore:
       - 'main'
 
+# Default to read-only; the regenerate job overrides to write for its commit step.
+permissions:
+  contents: read
+
 jobs:
   regenerate:
     name: Regenerate telemetry subsystem diagram
