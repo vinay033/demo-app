@@ -7,6 +7,7 @@ import { TelemetryService } from './telemetry.service';
 type RouterEvent = NavigationStart | NavigationEnd | NavigationError | NavigationCancel;
 import { RouterTelemetryService } from './router-telemetry.service';
 import { _setFlagOverridesForTesting } from '../feature-flags/feature-flag.service';
+import { LOG_PREFIX } from './resilience';
 
 describe('RouterTelemetryService', () => {
   let service: RouterTelemetryService;
@@ -27,6 +28,7 @@ describe('RouterTelemetryService', () => {
         { provide: Router, useValue: { events: events$.asObservable() } },
       ],
     });
+    spyOn(console, 'log');  // spy before injection to capture init log
     service = TestBed.inject(RouterTelemetryService);
     telemetry = TestBed.inject(TelemetryService);
   });
@@ -91,6 +93,11 @@ describe('RouterTelemetryService', () => {
     expect(telemetry.events[1].tags?.['url']).toBe('/b');
   }));
 
+  it('logs an init message with LOG_PREFIX when telemetry is ON', () => {
+    // console.log spy was set up before service injection in beforeEach
+    expect(console.log).toHaveBeenCalledWith(LOG_PREFIX, 'router telemetry initialised');
+  });
+
   // ── Flag OFF ──────────────────────────────────────────────────────────────
 
   describe('when enableTelemetry is OFF', () => {
@@ -107,6 +114,8 @@ describe('RouterTelemetryService', () => {
           { provide: Router, useValue: { events: events$.asObservable() } },
         ],
       });
+      // console.log is already spied from outer beforeEach; reset call history before the flag-off injection
+      (console.log as jasmine.Spy).calls.reset();
       service = TestBed.inject(RouterTelemetryService);
       telemetry = TestBed.inject(TelemetryService);
     });
@@ -118,6 +127,10 @@ describe('RouterTelemetryService', () => {
 
       expect(telemetry.events.length).toBe(0);
     }));
+
+    it('logs telemetry-disabled message with LOG_PREFIX when flag is OFF', () => {
+      expect(console.log).toHaveBeenCalledWith(LOG_PREFIX, 'telemetry disabled — router timing not active');
+    });
 
     it('ngOnDestroy does not throw when flag is OFF (Subscription.EMPTY path)', () => {
       expect(() => service.ngOnDestroy()).not.toThrow();

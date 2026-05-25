@@ -11,7 +11,7 @@
 
 import { ErrorHandler, Injectable } from '@angular/core';
 import { TelemetryService } from './telemetry.service';
-import { errorToMeta } from './resilience';
+import { errorToMeta, LOG_PREFIX } from './resilience';
 
 @Injectable()
 export class TelemetryErrorHandler implements ErrorHandler {
@@ -26,7 +26,7 @@ export class TelemetryErrorHandler implements ErrorHandler {
       error_message: message.slice(0, 120),
     });
 
-    // Preserve default Angular behaviour: log to console
-    console.error(error);
+    // Preserve default Angular behaviour: log to console with telemetry prefix for traceability
+    console.error(LOG_PREFIX, 'unhandled error:', error);
   }
 }

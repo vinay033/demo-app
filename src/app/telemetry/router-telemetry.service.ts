@@ -14,6 +14,7 @@ import { Router, NavigationStart, NavigationEnd, NavigationError, NavigationCanc
 import { Subscription } from 'rxjs';
 import { TelemetryService } from './telemetry.service';
 import { isFlagEnabled } from '../feature-flags/feature-flag.service';
+import { LOG_PREFIX } from './resilience';
 
 @Injectable({ providedIn: 'root' })
 export class RouterTelemetryService implements OnDestroy {
@@ -25,10 +26,12 @@ export class RouterTelemetryService implements OnDestroy {
     // Subscribe unconditionally so Angular does not complain about an
     // uninitialised field; the subscription immediately unsubscribes.
     if (!isFlagEnabled('enableTelemetry')) {
+      console.log(LOG_PREFIX, 'telemetry disabled — router timing not active');
       this.sub = Subscription.EMPTY;
       return;
     }
 
+    console.log(LOG_PREFIX, 'router telemetry initialised');
     this.sub = this.router.events.subscribe(event => {
       if (event instanceof NavigationStart) {
         this.starts.set(event.id, performance.now());

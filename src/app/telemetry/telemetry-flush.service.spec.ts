@@ -3,6 +3,7 @@ import { TelemetryFlushService } from './telemetry-flush.service';
 import { TelemetryService } from './telemetry.service';
 import { environment } from '../../environments/environment';
 import { _setFlagOverridesForTesting } from '../feature-flags/feature-flag.service';
+import { LOG_PREFIX } from './resilience';
 
 describe('TelemetryFlushService', () => {
   let service: TelemetryFlushService;
@@ -16,8 +17,8 @@ describe('TelemetryFlushService', () => {
     });
     telemetry = TestBed.inject(TelemetryService);
     flushSpy = spyOn(telemetry, 'flush').and.returnValue(true);
+    spyOn(console, 'log');  // spy before injection to capture init log
     service = TestBed.inject(TelemetryFlushService);
-    spyOn(console, 'log');
   });
 
   afterEach(() => _setFlagOverridesForTesting(null));
@@ -102,5 +103,36 @@ describe('TelemetryFlushService', () => {
     // Only the new instance's flush is called — old one was torn down
     expect(flushSpy2).toHaveBeenCalledTimes(1);
     expect(flushSpy).not.toHaveBeenCalled(); // old spy untouched
+  });
+
+  // ── logging ───────────────────────────────────────────────────────────────
+
+  it('logs an init message on construction with LOG_PREFIX', () => {
+    // console.log spy was set up before service injection in beforeEach
+    expect(console.log).toHaveBeenCalledWith(
+      LOG_PREFIX,
+      'flush service initialised — listening for pagehide / visibilitychange',
+    );
+  });
+
+  it('logs a flush-triggered message with buffer count on pagehide', () => {
+    (console.log as jasmine.Spy).calls.reset();
+    telemetry.counter('test.event', 1); // add 1 event to buffer
+    window.dispatchEvent(new Event('pagehide'));
+
+    expect(console.log).toHaveBeenCalledWith(
+      LOG_PREFIX,
+      'flush triggered — 1 event(s) in buffer',
+    );
+  });
+
+  it('logs flush-triggered with 0 when buffer is empty', () => {
+    (console.log as jasmine.Spy).calls.reset();
+    window.dispatchEvent(new Event('pagehide'));
+
+    expect(console.log).toHaveBeenCalledWith(
+      LOG_PREFIX,
+      'flush triggered — 0 event(s) in buffer',
+    );
   });
 });

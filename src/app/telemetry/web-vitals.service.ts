@@ -37,9 +37,11 @@ export class WebVitalsService {
   constructor(private readonly telemetry: TelemetryService) {
     // Feature flag guard: skip observer registration when telemetry is OFF.
     if (!isFlagEnabled('enableTelemetry')) {
+      console.log(LOG_PREFIX, 'telemetry disabled — web vitals not collected');
       return;
     }
     this.collect();
+    console.log(LOG_PREFIX, 'web vitals collection initialised');
   }
 
   private collect(): void {

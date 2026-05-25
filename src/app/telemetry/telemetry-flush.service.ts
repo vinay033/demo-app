@@ -1,6 +1,7 @@
 import { Injectable, OnDestroy } from '@angular/core';
 import { environment } from '../../environments/environment';
 import { TelemetryService } from './telemetry.service';
+import { LOG_PREFIX } from './resilience';
 
 /**
  * TelemetryFlushService
@@ -29,6 +30,7 @@ export class TelemetryFlushService implements OnDestroy {
   };
 
   constructor(private readonly _telemetry: TelemetryService) {
+    console.log(LOG_PREFIX, 'flush service initialised — listening for pagehide / visibilitychange');
     window.addEventListener('pagehide', this._onPageHide);
     document.addEventListener('visibilitychange', this._onVisibilityChange);
   }
@@ -39,6 +41,8 @@ export class TelemetryFlushService implements OnDestroy {
   }
 
   private _flush(): void {
+    const buffered = this._telemetry.events.length;
+    console.log(LOG_PREFIX, `flush triggered — ${buffered} event(s) in buffer`);
     this._telemetry.flush(environment.telemetryEndpoint);
   }
 }

@@ -554,3 +554,108 @@ ng test sub-app1 --no-watch --browsers=ChromeHeadlessCI
 
 Both must be green before merging any PR that touches a guarded boundary.
 
+
+---
+
+## Logging & metrics pattern
+
+All telemetry module files share a single, consistent logging convention. Understanding it lets you validate instrumentation quickly without adding extra tooling.
+
+### The pattern
+
+Every `console.*` call in `src/app/telemetry/` follows this structure:
+
+```typescript
+console.log(LOG_PREFIX, '<lifecycle message>');           // info/lifecycle
+console.warn(LOG_PREFIX, '<degraded state message>');     // soft failure
+console.error(LOG_PREFIX, '<hard failure message>', err); // error with cause
+```
+
+`LOG_PREFIX` is `'[telemetry]'` — exported from `resilience.ts` and imported by every file in the folder. Grepping or filtering by `[telemetry]` in the browser console shows all subsystem output in one view.
+
+### What each file logs
+
+| File | Event | Level | Message |
+|---|---|---|---|
+| `resilience.ts` | sendBeacon retry chain stops | `error` | `sendBeacon threw during retry — stopping retry chain` |
+| `resilience.ts` | `safeCallback` observer error | `error` | `observer error <err>` |
+| `telemetry.service.ts` | flush called with empty URL | `warn` | `flush() called with empty URL — skipped` |
+| `telemetry.service.ts` | sendBeacon throws on flush | `error` | `sendBeacon threw — flush aborted <err>` |
+| `telemetry.service.ts` | every metric emitted | `log` | `[telemetry] <type> <name>=<value>[ms] [tags]` |
+| `telemetry-error-handler.ts` | unhandled Angular error caught | `error` | `unhandled error: <err>` |
+| `telemetry-flush.service.ts` | service constructed | `log` | `flush service initialised — listening for pagehide / visibilitychange` |
+| `telemetry-flush.service.ts` | pagehide / visibilitychange fires | `log` | `flush triggered — N event(s) in buffer` |
+| `router-telemetry.service.ts` | service constructed, flag ON | `log` | `router telemetry initialised` |
+| `router-telemetry.service.ts` | constructed, flag OFF | `log` | `telemetry disabled — router timing not active` |
+| `web-vitals.service.ts` | observers registered, flag ON | `log` | `web vitals collection initialised` |
+| `web-vitals.service.ts` | constructed, flag OFF | `log` | `telemetry disabled — web vitals not collected` |
+| `web-vitals.service.ts` | observer registration throws | `error` | `web-vitals observer registration failed <err>` |
+
+### How to validate in the browser
+
+1. Open the app with `ng serve` (or `npm start`).
+2. Open Chrome DevTools → **Console** tab.
+3. In the filter box type: `[telemetry]`
+
+You should see the following on page load:
+
+```
+[telemetry] flush service initialised — listening for pagehide / visibilitychange
+[telemetry] router telemetry initialised
+[telemetry] web vitals collection initialised
+```
+
+When you navigate between routes:
+```
+[telemetry] timing route.navigation_ms=42ms url=/about outcome=success
+```
+
+When Web Vitals fire (after interaction or page hide):
+```
+[telemetry] gauge web_vitals.cls=5 rating=good navigation_type=navigate
+[telemetry] timing web_vitals.lcp=1234ms rating=good navigation_type=navigate
+```
+
+To see Performance API marks alongside logs, open the **Performance** panel → record a short session → look in **User Timings** for `telemetry:*` entries.
+
+### How to validate with the flag OFF
+
+Set `enableTelemetry: false` in `src/environments/environment.ts` and reload. You should see:
+
+```
+[telemetry] telemetry disabled — router timing not active
+[telemetry] telemetry disabled — web vitals not collected
+```
+
+And **no** metric log lines or flush-trigger logs.
+
+### How to validate with tests
+
+All logging assertions are covered by specs in `src/app/telemetry/`:
+
+```bash
+# Run all telemetry specs (fast, headless):
+ng test demo-app --no-watch --browsers=ChromeHeadlessCI \
+  --include="src/app/telemetry/**"
+```
+
+Specs that assert log output:
+
+| Spec file | What is asserted |
+|---|---|
+| `resilience.spec.ts` | `safeCallback` default uses `console.error(LOG_PREFIX, 'observer error', err)` |
+| `resilience-failures.spec.ts` | Retry chain log; flush `console.warn` for empty URL |
+| `telemetry.service.spec.ts` | `console.warn` for empty URL flush |
+| `telemetry-error-handler.spec.ts` | `console.error(LOG_PREFIX, 'unhandled error:', err)` |
+| `telemetry-flush.service.spec.ts` | Init log; flush-triggered log with buffer count |
+| `router-telemetry.service.spec.ts` | Init log (flag ON); disabled log (flag OFF) |
+| `web-vitals.service.spec.ts` | Init log (flag ON); disabled log (flag OFF) |
+
+### Adding a new log line
+
+Follow this checklist when adding console output to the telemetry folder:
+
+1. Import `LOG_PREFIX` from `./resilience` — do not inline the string.
+2. Use the appropriate level: `log` for lifecycle, `warn` for soft failures, `error` for hard failures with cause.
+3. Multi-argument form: `console.error(LOG_PREFIX, 'message', err)` — do not template-embed LOG_PREFIX.
+4. Add or update a spec assertion: spy on `console.log`/`warn`/`error` **before** injecting the service, then assert the exact call signature.
