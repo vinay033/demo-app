@@ -37,6 +37,18 @@ jobs:
           node-version: 20
           cache: "npm"
 
+      - name: Cache Puppeteer Chromium download
+        # RELIABILITY: Puppeteer downloads ~120 MB of Chromium during npm ci's postinstall.
+        # Caching ~/.cache/puppeteer keyed on the lockfile saves ~35 s per run and
+        # prevents failures when the Chromium download CDN is slow or rate-limited.
+        # Cache is invalidated automatically when package-lock.json changes (new Puppeteer version).
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/puppeteer
+          key: puppeteer-${{ runner.os }}-${{ hashFiles('package-lock.json') }}
+          restore-keys: |
+            puppeteer-${{ runner.os }}-
+
       - name: Install dependencies
         # Retry up to 3 times — npm ci fails transiently on mirror/network timeouts
         run: |

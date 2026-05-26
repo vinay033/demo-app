@@ -69,23 +69,33 @@ jobs:
           done
 
       - name: Install Chrome system libraries (required by karma-chrome-launcher)
-        # Retry once — apt-get mirrors can return 503 on first attempt
+        # RELIABILITY: ubuntu-latest runners ship with google-chrome-stable pre-installed.
+        # Skip apt-get entirely when Chrome is already on PATH — saves ~25 s per matrix cell
+        # (6 cells × 25 s = ~2.5 min) and eliminates apt-get 503 mirror failures.
+        # apt-get is retained as a fallback for self-hosted or custom runner images.
         run: |
-          for attempt in 1 2; do
-            sudo apt-get update -qq && \
-            sudo apt-get install -y --no-install-recommends \
-              google-chrome-stable \
-              libnss3 libatk1.0-0 libatk-bridge2.0-0 libcups2 \
-              libdrm2 libxkbcommon0 libxcomposite1 libxdamage1 \
-              libxfixes3 libxrandr2 libgbm1 libasound2t64 \
-              libxshmfence1 libglu1-mesa && break || \
-            sudo apt-get install -y --no-install-recommends \
-              chromium-browser \
-              libnss3 libatk1.0-0 libatk-bridge2.0-0 libcups2 \
-              libdrm2 libxkbcommon0 libxcomposite1 libxdamage1 \
-              libxfixes3 libxrandr2 libgbm1 libasound2t64 && break
-            [ $attempt -lt 2 ] && echo "Chrome install attempt $attempt failed — retrying in 10s..." && sleep 10
-          done
+          if command -v google-chrome-stable &>/dev/null; then
+            echo "✅ google-chrome-stable already present at $(which google-chrome-stable) — skipping apt-get"
+          elif command -v chromium-browser &>/dev/null || command -v chromium &>/dev/null; then
+            echo "✅ chromium already present — skipping apt-get"
+          else
+            echo "⚠️  Chrome not found — installing via apt-get (fallback for custom runners)"
+            for attempt in 1 2; do
+              sudo apt-get update -qq && \
+              sudo apt-get install -y --no-install-recommends \
+                google-chrome-stable \
+                libnss3 libatk1.0-0 libatk-bridge2.0-0 libcups2 \
+                libdrm2 libxkbcommon0 libxcomposite1 libxdamage1 \
+                libxfixes3 libxrandr2 libgbm1 libasound2t64 \
+                libxshmfence1 libglu1-mesa && break || \
+              sudo apt-get install -y --no-install-recommends \
+                chromium-browser \
+                libnss3 libatk1.0-0 libatk-bridge2.0-0 libcups2 \
+                libdrm2 libxkbcommon0 libxcomposite1 libxdamage1 \
+                libxfixes3 libxrandr2 libgbm1 libasound2t64 && break
+              [ $attempt -lt 2 ] && echo "Chrome install attempt $attempt failed — retrying in 10s..." && sleep 10
+            done
+          fi
 
       - name: Detect Chrome binary path
         # Exports CHROME_BIN so the Karma step picks up whichever binary was installed
@@ -120,10 +130,14 @@ jobs:
             CONFIG_FLAG=""
           fi
 
+          # RELIABILITY: wrap ng test with timeout --kill-after=30 600 (10 min SIGTERM, +30s SIGKILL).
+          # Chrome/Karma hangs are rare but will pin a runner for the full 20-min job timeout
+          # without this guard.  Fail-fast at 10 min frees the slot and surfaces the hang clearly.
+          # Normal test runs complete in under 2 min; the 10-min limit is conservative.
           if [ -z "${{ matrix.project.ng_target }}" ]; then
-            npx ng test --no-watch --browsers=ChromeHeadlessCI $CONFIG_FLAG 2>&1 | tee test-output.txt
+            timeout --kill-after=30 600 npx ng test --no-watch --browsers=ChromeHeadlessCI $CONFIG_FLAG 2>&1 | tee test-output.txt
           else
-            npx ng test ${{ matrix.project.ng_target }} --no-watch --browsers=ChromeHeadlessCI $CONFIG_FLAG 2>&1 | tee test-output.txt
+            timeout --kill-after=30 600 npx ng test ${{ matrix.project.ng_target }} --no-watch --browsers=ChromeHeadlessCI $CONFIG_FLAG 2>&1 | tee test-output.txt
           fi
           # CHROME_BIN is exported by the 'Detect Chrome binary path' step via $GITHUB_ENV
 
