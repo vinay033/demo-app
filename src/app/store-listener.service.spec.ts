@@ -1,65 +1,98 @@
 import { TestBed } from '@angular/core/testing';
 import { StoreListenerService } from './store-listener.service';
+import { TelemetryService } from './telemetry/telemetry.service';
+import { _setFlagOverridesForTesting } from './feature-flags/feature-flag.service';
 import { store } from '../../projects/sub-app1/store';
+import { LOG_PREFIX } from './telemetry/resilience';
 
-/**
- * Coverage target: src/app/store-listener.service.ts
- *
- * Before:  80% statements (4/5), 66.66% functions (2/3)
- *          Uncovered: the store.subscribe() callback body (line 12)
- *          and the anonymous callback function (anonymous_1).
- *
- * After:   100% statements, 100% functions — dispatching an action fires
- *          the subscribe callback, covering the console.log line.
- */
 describe('StoreListenerService', () => {
   let service: StoreListenerService;
+  let telemetrySpy: jasmine.SpyObj<TelemetryService>;
 
   beforeEach(() => {
-    TestBed.configureTestingModule({});
+    telemetrySpy = jasmine.createSpyObj('TelemetryService', ['gauge']);
+    TestBed.configureTestingModule({
+      providers: [{ provide: TelemetryService, useValue: telemetrySpy }],
+    });
     spyOn(console, 'log');
-    service = TestBed.inject(StoreListenerService);
   });
 
-  afterEach(() => TestBed.resetTestingModule());
+  afterEach(() => {
+    _setFlagOverridesForTesting(null);
+    TestBed.resetTestingModule();
+  });
 
   // ── Construction ──────────────────────────────────────────────────────────
 
   it('creates without error', () => {
+    service = TestBed.inject(StoreListenerService);
     expect(service).toBeTruthy();
   });
 
-  it('subscribes to the Redux store on construction', () => {
-    // The subscribe callback fires on every state change.
-    // Dispatching a dummy action triggers it and covers line 12.
+  it('does NOT log state to console on dispatch', () => {
+    _setFlagOverridesForTesting({ enableReduxMonitor: true });
+    service = TestBed.inject(StoreListenerService);
     store.dispatch({ type: '@@TEST/init' });
-
-    expect(console.log).toHaveBeenCalledWith(store.getState());
+    expect(console.log).not.toHaveBeenCalledWith(store.getState());
   });
 
-  // ── Subscribe callback (anonymous_1) ──────────────────────────────────────
+  // ── LOG_PREFIX lifecycle logs ─────────────────────────────────────────────
 
-  it('logs current state to console.log on each store dispatch', () => {
+  it('logs init message with LOG_PREFIX when enableReduxMonitor is ON', () => {
+    _setFlagOverridesForTesting({ enableReduxMonitor: true });
+    service = TestBed.inject(StoreListenerService);
+    expect(console.log).toHaveBeenCalledWith(
+      LOG_PREFIX,
+      'redux store monitor initialised — dispatch count tracking active',
+    );
+  });
+
+  it('logs disabled message with LOG_PREFIX when enableReduxMonitor is OFF', () => {
+    _setFlagOverridesForTesting({ enableReduxMonitor: false });
+    service = TestBed.inject(StoreListenerService);
+    expect(console.log).toHaveBeenCalledWith(
+      LOG_PREFIX,
+      'redux monitor disabled — dispatch count not tracked',
+    );
+  });
+
+  // ── Flag ON: telemetry gauge emitted ──────────────────────────────────────
+
+  it('emits redux.dispatch_count gauge when enableReduxMonitor is ON', () => {
+    _setFlagOverridesForTesting({ enableReduxMonitor: true });
+    service = TestBed.inject(StoreListenerService);
+
     store.dispatch({ type: '@@TEST/action_A' });
-    store.dispatch({ type: '@@TEST/action_B' });
-
-    // console.log is called once per dispatch — each with the current state
-    expect((console.log as jasmine.Spy).calls.count()).toBeGreaterThanOrEqual(2);
-    expect(console.log).toHaveBeenCalledWith(store.getState());
+    expect(telemetrySpy.gauge).toHaveBeenCalledWith('redux.dispatch_count', jasmine.any(Number));
   });
 
-  it('logs the state object returned by store.getState()', () => {
-    const stateBefore = store.getState();
-    store.dispatch({ type: '@@TEST/state_check' });
+  it('increments the dispatch count on each action', () => {
+    _setFlagOverridesForTesting({ enableReduxMonitor: true });
+    service = TestBed.inject(StoreListenerService);
 
-    // rootReducer is identity — state is always the same object
-    expect(console.log).toHaveBeenCalledWith(stateBefore);
+    store.dispatch({ type: '@@TEST/inc_1' });
+    store.dispatch({ type: '@@TEST/inc_2' });
+
+    const calls = telemetrySpy.gauge.calls.allArgs();
+    const counts = calls.map(([, v]) => v as number);
+    // Each dispatch should increment the count
+    expect(counts[counts.length - 1]).toBeGreaterThan(counts[0]);
+  });
+
+  // ── Flag OFF: no telemetry emitted ────────────────────────────────────────
+
+  it('does NOT emit gauge when enableReduxMonitor is OFF', () => {
+    _setFlagOverridesForTesting({ enableReduxMonitor: false });
+    service = TestBed.inject(StoreListenerService);
+
+    store.dispatch({ type: '@@TEST/no_gauge' });
+    expect(telemetrySpy.gauge).not.toHaveBeenCalled();
   });
 
   // ── ngOnDestroy ───────────────────────────────────────────────────────────
 
-  it('calls unsubscribe on ngOnDestroy — stops receiving further dispatches', () => {
-    // Spy on the private unsubscribe function to verify it is called
+  it('calls unsubscribe on ngOnDestroy', () => {
+    service = TestBed.inject(StoreListenerService);
     // eslint-disable-next-line @typescript-eslint/no-explicit-any -- accessing private for test
     const unsubSpy = spyOn(service as any, 'unsubscribe').and.callThrough();
     service.ngOnDestroy();
@@ -67,9 +100,10 @@ describe('StoreListenerService', () => {
   });
 
   it('can be destroyed multiple times without throwing', () => {
+    service = TestBed.inject(StoreListenerService);
     expect(() => {
       service.ngOnDestroy();
-      service.ngOnDestroy(); // second call — unsubscribe is a no-op after first call
+      service.ngOnDestroy();
     }).not.toThrow();
   });
 });

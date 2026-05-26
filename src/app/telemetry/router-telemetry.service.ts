@@ -52,6 +52,8 @@ export class RouterTelemetryService implements OnDestroy {
             outcome,
           });
 
+          console.log(LOG_PREFIX, `navigation ${outcome} — ${event.url} (${Math.round(durationMs)}ms)`);
+
           this.starts.delete(event.id);
         }
       }
@@ -60,5 +62,6 @@ export class RouterTelemetryService implements OnDestroy {
 
   ngOnDestroy(): void {
     this.sub.unsubscribe();
+    this.starts.clear(); // release any in-flight navigation entries
   }
 }

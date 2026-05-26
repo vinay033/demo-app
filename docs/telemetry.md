@@ -13,8 +13,9 @@ How to view, query, extend, and safely operate the telemetry instrumentation in 
 | Metric name | Type | Tags | Emitted by |
 |---|---|---|---|
 | `error.unhandled` | counter | `error_name` | `TelemetryErrorHandler` |
-| `route.navigation_ms` | timing (ms) | `url`, `nav_id` | `RouterTelemetryService` |
+| `route.navigation_ms` | timing (ms) | `url`, `outcome` | `RouterTelemetryService` |
 | `redux.dispatch` | counter | `action` | `dispatchMonitorEnhancer` (store.ts) |
+| `redux.dispatch_count` | gauge | _(none)_ | `StoreListenerService` |
 | `web_vitals.lcp` | timing (ms) | `rating`, `navigation_type` | `WebVitalsService` |
 | `web_vitals.fcp` | timing (ms) | `rating`, `navigation_type` | `WebVitalsService` |
 | `web_vitals.ttfb` | timing (ms) | `rating`, `navigation_type` | `WebVitalsService` |
@@ -36,11 +37,26 @@ Every event is written to `console.log` in the format:
 Example lines you will see while navigating the app:
 
 ```
-[telemetry] timing  route.navigation_ms=87ms   url=/products nav_id=6051
+[telemetry] timing  route.navigation_ms=87ms   url=/products outcome=success
 [telemetry] counter redux.dispatch=1            action=SET_ITEMS
+[telemetry] gauge   redux.dispatch_count=5
 [telemetry] timing  web_vitals.lcp=1820ms       rating=needs-improvement navigation_type=navigate
 [telemetry] gauge   web_vitals.cls=80           rating=good navigation_type=navigate
 [telemetry] counter error.unhandled=1           error_name=TypeError
+```
+
+**Service lifecycle logs** (emitted at init / flag-check time, not as buffered metrics):
+
+```
+[telemetry] router telemetry initialised
+[telemetry] navigation success — /products (87ms)
+[telemetry] navigation error — /bad-route (45ms)
+[telemetry] navigation cancelled — /guarded (12ms)
+[telemetry] redux store monitor initialised — dispatch count tracking active
+[telemetry] redux monitor disabled — dispatch count not tracked
+[telemetry] flush service initialised — listening for pagehide / visibilitychange
+[telemetry] flush triggered — 12 event(s) in buffer
+[telemetry] flush triggered — buffer empty, nothing to send
 ```
 
 Filter by `[telemetry]` in the Console filter box to isolate all events.

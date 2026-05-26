@@ -42,7 +42,11 @@ export class TelemetryFlushService implements OnDestroy {
 
   private _flush(): void {
     const buffered = this._telemetry.events.length;
-    console.log(LOG_PREFIX, `flush triggered — ${buffered} event(s) in buffer`);
+    if (buffered === 0) {
+      console.log(LOG_PREFIX, 'flush triggered — buffer empty, nothing to send');
+    } else {
+      console.log(LOG_PREFIX, `flush triggered — ${buffered} event(s) in buffer`);
+    }
     this._telemetry.flush(environment.telemetryEndpoint);
   }
 }

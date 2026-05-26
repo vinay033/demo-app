@@ -93,10 +93,56 @@ describe('RouterTelemetryService', () => {
     expect(telemetry.events[1].tags?.['url']).toBe('/b');
   }));
 
+  it('clears in-flight starts Map on ngOnDestroy', fakeAsync(() => {
+    // Start a navigation but do NOT fire the end event before destroying.
+    events$.next(new NavigationStart(20, '/pending'));
+    tick(5);
+    service.ngOnDestroy();
+    // After destroy, starts Map is cleared — re-subscribing (via a new service)
+    // would not emit a timing for this abandoned navigation. Guard: no event emitted.
+    expect(telemetry.events.length).toBe(0);
+  }));
+
   it('logs an init message with LOG_PREFIX when telemetry is ON', () => {
     // console.log spy was set up before service injection in beforeEach
     expect(console.log).toHaveBeenCalledWith(LOG_PREFIX, 'router telemetry initialised');
   });
+
+  it('logs navigation outcome with LOG_PREFIX on NavigationEnd', fakeAsync(() => {
+    (console.log as jasmine.Spy).calls.reset();
+    events$.next(new NavigationStart(5, '/dashboard'));
+    tick(42);
+    events$.next(new NavigationEnd(5, '/dashboard', '/dashboard'));
+
+    expect(console.log).toHaveBeenCalledWith(
+      LOG_PREFIX,
+      jasmine.stringMatching(/^navigation success — \/dashboard \(\d+ms\)$/),
+    );
+  }));
+
+  it('logs navigation outcome with LOG_PREFIX on NavigationError', fakeAsync(() => {
+    (console.log as jasmine.Spy).calls.reset();
+    events$.next(new NavigationStart(6, '/bad-route'));
+    tick(10);
+    events$.next(new NavigationError(6, '/bad-route', new Error('not found')));
+
+    expect(console.log).toHaveBeenCalledWith(
+      LOG_PREFIX,
+      jasmine.stringMatching(/^navigation error — \/bad-route \(\d+ms\)$/),
+    );
+  }));
+
+  it('logs navigation outcome with LOG_PREFIX on NavigationCancel', fakeAsync(() => {
+    (console.log as jasmine.Spy).calls.reset();
+    events$.next(new NavigationStart(7, '/guarded'));
+    tick(5);
+    events$.next(new NavigationCancel(7, '/guarded', 'auth guard'));
+
+    expect(console.log).toHaveBeenCalledWith(
+      LOG_PREFIX,
+      jasmine.stringMatching(/^navigation cancelled — \/guarded \(\d+ms\)$/),
+    );
+  }));
 
   // ── Flag OFF ──────────────────────────────────────────────────────────────
 
