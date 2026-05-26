@@ -1,6 +1,7 @@
 import { TestBed } from '@angular/core/testing';
 import { TelemetryService } from './telemetry.service';
 import { TelemetryErrorHandler } from './telemetry-error-handler';
+import { LOG_PREFIX } from './resilience';
 
 describe('TelemetryErrorHandler', () => {
   let handler: TelemetryErrorHandler;
@@ -39,10 +40,10 @@ describe('TelemetryErrorHandler', () => {
     expect(telemetry.events[0].tags?.['error_name']).toBe('UnknownError');
   });
 
-  it('still calls console.error so the original error is visible', () => {
+  it('still calls console.error with LOG_PREFIX so the original error is identifiable', () => {
     const err = new Error('visible');
     handler.handleError(err);
-    expect(console.error).toHaveBeenCalledWith(err);
+    expect(console.error).toHaveBeenCalledWith(LOG_PREFIX, 'unhandled error:', err);
   });
 
   it('increments the counter on each error', () => {

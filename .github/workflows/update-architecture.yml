@@ -1,0 +1,59 @@
+name: Update architecture diagram
+
+on:
+  push:
+    paths:
+      - 'src/app/telemetry/**/*.ts'
+      - 'scripts/gen-architecture.mjs'
+    branches-ignore:
+      - 'main'
+
+# Default to read-only; the regenerate job overrides to write for its commit step.
+permissions:
+  contents: read
+
+# Only one regeneration at a time per branch; cancel any queued run if a newer
+# push arrives before the previous run finishes.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  regenerate:
+    name: Regenerate telemetry subsystem diagram
+    runs-on: ubuntu-latest
+    timeout-minutes: 10   # gen + validate + git push should complete well within 10 min
+
+    permissions:
+      contents: write
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # Fetch with token so the commit push works
+          token: ${{ secrets.GITHUB_TOKEN }}
+          ref: ${{ github.head_ref || github.ref_name }}
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'   # matches contract-tests.yml for consistency
+          cache: 'npm'         # cache node_modules across runs
+
+      - name: Regenerate diagram
+        run: node scripts/gen-architecture.mjs --summary
+
+      - name: Validate diagrams still render
+        run: node scripts/validate-diagrams.mjs
+
+      - name: Commit updated diagram (if changed)
+        run: |
+          git config user.name  "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git diff --quiet docs/architecture.md || (
+            git add docs/architecture.md &&
+            git commit -m "docs(architecture): auto-regenerate telemetry diagram [skip ci]"
+          )
+
+      - name: Push
+        run: git push
+        continue-on-error: true   # advisory — never blocks the originating PR

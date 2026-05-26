@@ -30,16 +30,18 @@ import { onLCP, onCLS, onINP, onFCP, onTTFB } from 'web-vitals';
 import type { MetricType } from 'web-vitals';
 import { TelemetryService } from './telemetry.service';
 import { isFlagEnabled } from '../feature-flags/feature-flag.service';
-import { safeCallback } from './resilience';
+import { safeCallback, LOG_PREFIX } from './resilience';
 
 @Injectable({ providedIn: 'root' })
 export class WebVitalsService {
   constructor(private readonly telemetry: TelemetryService) {
     // Feature flag guard: skip observer registration when telemetry is OFF.
     if (!isFlagEnabled('enableTelemetry')) {
+      console.log(LOG_PREFIX, 'telemetry disabled — web vitals not collected');
       return;
     }
     this.collect();
+    console.log(LOG_PREFIX, 'web vitals collection initialised');
   }
 
   private collect(): void {
@@ -79,7 +81,7 @@ export class WebVitalsService {
       onFCP(report);
       onTTFB(report);
     } catch (err) {
-      console.error('[telemetry] web-vitals observer registration failed', err);
+      console.error(LOG_PREFIX, 'web-vitals observer registration failed', err);
     }
   }
 }

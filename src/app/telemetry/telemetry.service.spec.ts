@@ -117,7 +117,10 @@ describe('TelemetryService', () => {
       const ok = service.flush('');
       expect(ok).toBeFalse();
       expect(navigator.sendBeacon).not.toHaveBeenCalled();
-      expect(console.warn).toHaveBeenCalledWith(jasmine.stringContaining('empty URL'));
+      expect(console.warn).toHaveBeenCalledWith(
+        jasmine.stringContaining('[telemetry]'),
+        jasmine.stringContaining('empty URL'),
+      );
     });
 
     it('sends NDJSON: one JSON object per line', () => {

@@ -2,6 +2,7 @@ import { TestBed } from '@angular/core/testing';
 import { WebVitalsService } from './web-vitals.service';
 import { TelemetryService } from './telemetry.service';
 import { _setFlagOverridesForTesting } from '../feature-flags/feature-flag.service';
+import { LOG_PREFIX } from './resilience';
 
 describe('WebVitalsService', () => {
   let telemetry: TelemetryService;
@@ -27,6 +28,11 @@ describe('WebVitalsService', () => {
   it('is created without throwing', () => {
     // web-vitals on* functions are no-ops in jsdom — just verify construction
     expect(() => TestBed.inject(WebVitalsService)).not.toThrow();
+  });
+
+  it('logs an init message with LOG_PREFIX when telemetry is ON', () => {
+    TestBed.inject(WebVitalsService);
+    expect(console.log).toHaveBeenCalledWith(LOG_PREFIX, 'web vitals collection initialised');
   });
 
   it('pipes a simulated LCP metric as a timing event', () => {
@@ -76,6 +82,12 @@ describe('WebVitalsService', () => {
       expect(() => {
         TestBed.inject(WebVitalsService);
       }).not.toThrow();
+    });
+
+    it('logs telemetry-disabled message with LOG_PREFIX when flag is OFF', () => {
+      _setFlagOverridesForTesting({ enableTelemetry: false });
+      TestBed.inject(WebVitalsService);
+      expect(console.log).toHaveBeenCalledWith(LOG_PREFIX, 'telemetry disabled — web vitals not collected');
     });
 
     it('does not register any web-vitals observers — buffer stays empty', () => {

@@ -12,10 +12,20 @@ on:
       - "scripts/validate-diagrams.mjs"
       - ".github/workflows/validate-docs.yml"
 
+# Minimal permissions: diagram validation is read-only. No repo writes needed.
+permissions:
+  contents: read
+
+# Cancel redundant validation runs on the same branch/PR.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
+
 jobs:
   validate-diagrams:
     name: Mermaid diagram validation
     runs-on: ubuntu-latest
+    timeout-minutes: 15   # Puppeteer/Chromium launch can be slow; cap before it hangs
 
     steps:
       - name: Checkout repository
@@ -28,7 +38,12 @@ jobs:
           cache: "npm"
 
       - name: Install dependencies
-        run: npm ci --legacy-peer-deps
+        # Retry up to 3 times — npm ci fails transiently on mirror/network timeouts
+        run: |
+          for attempt in 1 2 3; do
+            npm ci --legacy-peer-deps && break
+            [ $attempt -lt 3 ] && echo "Attempt $attempt failed — retrying in 15s..." && sleep 15
+          done
 
       - name: Install Chromium dependencies (required by Puppeteer)
         run: |

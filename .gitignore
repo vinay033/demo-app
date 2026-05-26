@@ -40,3 +40,29 @@ testem.log
 # System files
 .DS_Store
 Thumbs.db
+
+# ── Secrets and credentials ──────────────────────────────────────────────────
+# These patterns prevent accidental commitment of secrets.
+# If a file matching a pattern is intentionally version-controlled (unlikely),
+# use `git add --force` and add an explicit inline comment explaining why it is
+# safe. Do NOT remove these patterns to work around the check.
+.env
+.env.*
+!.env.example          # example/template files are safe to commit
+*.pem
+*.key
+*.p12
+*.pfx
+*.crt
+*.cer
+*_rsa
+*_dsa
+*_ecdsa
+*_ed25519
+.secret
+*.secret
+*secret*key*
+*api_key*
+*apikey*
+*.credentials
+.netrc

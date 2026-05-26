@@ -4,6 +4,7 @@ import { BrowserModule } from '@angular/platform-browser';
 import { AppRoutingModule } from './app-routing.module';
 import { AppComponent } from './app.component';
 import { TelemetryErrorHandler } from './telemetry/telemetry-error-handler';
+import { TelemetryFlushService } from './telemetry/telemetry-flush.service';
 import { RouterTelemetryService } from './telemetry/router-telemetry.service';
 import { WebVitalsService } from './telemetry/web-vitals.service';
 import { isFlagEnabled } from './feature-flags/feature-flag.service';
@@ -25,6 +26,9 @@ import { isFlagEnabled } from './feature-flags/feature-flag.service';
     isFlagEnabled('enableTelemetry')
       ? { provide: ErrorHandler, useClass: TelemetryErrorHandler }
       : { provide: ErrorHandler, useClass: ErrorHandler },
+    // Lifecycle flush: flushes ring buffer on pagehide / visibilitychange.
+    // Gated by the same flag as the rest of telemetry; no-op when endpoint is ''.
+    ...(isFlagEnabled('enableTelemetry') ? [TelemetryFlushService] : []),
   ],
   bootstrap: [AppComponent],
   schemas: [

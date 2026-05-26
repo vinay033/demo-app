@@ -31,6 +31,7 @@ import {
   chunkArray,
   scheduleBeaconRetry,
   BEACON_CHUNK_EVENTS,
+  LOG_PREFIX,
   RetryOptions,
 } from './resilience';
 
@@ -81,7 +82,7 @@ export class TelemetryService {
   flush(url: string, retryOptions?: RetryOptions): boolean {
     // Guard: empty URL — sendBeacon would throw TypeError
     if (!url) {
-      console.warn('[telemetry] flush() called with empty URL — skipped');
+      console.warn(LOG_PREFIX, 'flush() called with empty URL — skipped');
       return false;
     }
 
@@ -103,7 +104,16 @@ export class TelemetryService {
         [chunk.map(e => JSON.stringify(e)).join('\n')],
         { type: 'application/x-ndjson' },
       );
-      const ok = navigator.sendBeacon(url, blob);
+      let ok: boolean;
+      try {
+        ok = navigator.sendBeacon(url, blob);
+      } catch (err) {
+        // sendBeacon can throw TypeError for malformed URLs or if the browser
+        // rejects the call entirely. Treat as a permanent failure for this chunk.
+        console.error(LOG_PREFIX, 'sendBeacon threw — flush aborted', err);
+        allSent = false;
+        break;
+      }
       if (ok) {
         sentCount += chunk.length;
       } else {
@@ -136,8 +146,14 @@ export class TelemetryService {
     // Mark the event so it appears in DevTools > Performance > User Timings.
     // Tag values are encoded into the mark name as key:value pairs so they
     // survive the string-only constraint of the Performance API.
-    const tagSuffix = event.tags
-      ? '|' + Object.entries(event.tags).map(([k, v]) => `${k}:${v}`).join(',')
+    //
+    // Perf note: Object.entries(event.tags) is computed once here and reused
+    // for both the Performance API mark name and the console log string below.
+    // Previously it was computed twice, adding a redundant O(t) allocation on
+    // every tagged event (where t = number of tags).
+    const tagEntries = event.tags ? Object.entries(event.tags) : null;
+    const tagSuffix = tagEntries
+      ? '|' + tagEntries.map(([k, v]) => `${k}:${v}`).join(',')
       : '';
     const markName = `telemetry:${event.type}:${event.name}${tagSuffix}`;
 
@@ -159,10 +175,10 @@ export class TelemetryService {
     }
 
     // ── Console output (dev-mode visibility) ──────────────────────────────
-    const tagStr = event.tags
-      ? ' ' + Object.entries(event.tags).map(([k, v]) => `${k}=${v}`).join(' ')
+    const tagStr = tagEntries
+      ? ' ' + tagEntries.map(([k, v]) => `${k}=${v}`).join(' ')
       : '';
     const unit = event.type === 'timing' ? 'ms' : '';
-    console.log(`[telemetry] ${event.type} ${event.name}=${event.value}${unit}${tagStr}`);
+    console.log(`${LOG_PREFIX} ${event.type} ${event.name}=${event.value}${unit}${tagStr}`);
   }
 }
