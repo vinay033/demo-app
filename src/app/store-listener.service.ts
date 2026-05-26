@@ -14,16 +14,15 @@ export class StoreListenerService implements OnDestroy {
   constructor(private readonly telemetry: TelemetryService) {
     if (isFlagEnabled('enableReduxMonitor')) {
       console.log(LOG_PREFIX, 'redux store monitor initialised — dispatch count tracking active');
+      // Only subscribe when monitoring is active — avoids per-dispatch overhead when flag is OFF.
+      this.unsubscribe = this.store.subscribe(() => {
+        this.dispatchCount++;
+        this.telemetry.gauge('redux.dispatch_count', this.dispatchCount);
+      });
     } else {
       console.log(LOG_PREFIX, 'redux monitor disabled — dispatch count not tracked');
+      this.unsubscribe = () => {}; // no-op; Unsubscribe = () => void
     }
-
-    this.unsubscribe = this.store.subscribe(() => {
-      this.dispatchCount++;
-      if (isFlagEnabled('enableReduxMonitor')) {
-        this.telemetry.gauge('redux.dispatch_count', this.dispatchCount);
-      }
-    });
   }
 
   ngOnDestroy(): void {
