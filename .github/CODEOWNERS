@@ -1,0 +1,32 @@
+# CODEOWNERS — enforced review requirements for security-sensitive files.
+#
+# Any PR that touches a path listed here requires approval from the
+# designated owner(s) before it can be merged.  This prevents unreviewed
+# modifications to security controls.
+#
+# Syntax reference:
+#   https://docs.github.com/en/repositories/managing-your-repositorys-settings-and-features/customizing-your-repository/about-code-owners
+#
+# NOTE: Replace @vinay033 with the real team handle (e.g. @your-org/security)
+#       once a dedicated security team or review group exists.
+
+# ── Security policy and audit configuration ──────────────────────────────────
+SECURITY.md                        @vinay033
+audit-ci.json                      @vinay033
+
+# ── CI/CD workflow definitions ───────────────────────────────────────────────
+# Every workflow file must be reviewed before merge: compromised workflows can
+# exfiltrate secrets or push malicious commits using GITHUB_TOKEN.
+.github/workflows/                 @vinay033
+
+# ── Security check script ────────────────────────────────────────────────────
+scripts/security-check.mjs         @vinay033
+
+# ── Dependency manifest ───────────────────────────────────────────────────────
+# Changes to the lock file introduce new transitive dependencies and must be
+# reviewed for supply-chain risk.
+package.json                       @vinay033
+package-lock.json                  @vinay033
+
+# ── Husky pre-commit hook ────────────────────────────────────────────────────
+.husky/                            @vinay033

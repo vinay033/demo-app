@@ -52,10 +52,10 @@ jobs:
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5  # v4
 
       - name: Set up Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020  # v4
         with:
           node-version: 20
           cache: "npm"
@@ -185,7 +185,7 @@ jobs:
           JS
 
       - name: Upload coverage report (${{ matrix.project.name }} flags-${{ matrix.flag_mode }})
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02  # v4
         if: always()
         with:
           name: coverage-${{ matrix.project.name }}-flags-${{ matrix.flag_mode }}
@@ -219,12 +219,12 @@ jobs:
 
           | Project | Flag mode | Specs | Result |
           |---|---|---|---|
-          | demo-app  | flags-on  | 67 | ${RESULT} |
-          | demo-app  | flags-off | 67 | ${RESULT} |
-          | sub-app1  | flags-on  | 8  | ${RESULT} |
-          | sub-app1  | flags-off | 8  | ${RESULT} |
-          | sub-app2  | flags-on  | 3  | ${RESULT} |
-          | sub-app2  | flags-off | 3  | ${RESULT} |
+          | demo-app  | flags-on  | 175 | ${RESULT} |
+          | demo-app  | flags-off | 175 | ${RESULT} |
+          | sub-app1  | flags-on  | 8   | ${RESULT} |
+          | sub-app1  | flags-off | 8   | ${RESULT} |
+          | sub-app2  | flags-on  | 3   | ${RESULT} |
+          | sub-app2  | flags-off | 3   | ${RESULT} |
 
           **Total: 6 matrix cells (3 projects × 2 flag modes)**
           Each flag mode validates ON-path and OFF-path guard behaviour independently.
@@ -249,7 +249,7 @@ jobs:
 
     steps:
       - name: Download flags-on coverage artifacts (used for PR comment)
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093  # v4
         with:
           pattern: coverage-*-flags-on
           path: coverage-artifacts/
@@ -267,7 +267,7 @@ jobs:
             const { execSync } = require('child_process');
 
             const projects = ['demo-app', 'sub-app1', 'sub-app2'];
-            const specCounts = { 'demo-app': 67, 'sub-app1': 8, 'sub-app2': 3 };
+            const specCounts = { 'demo-app': 175, 'sub-app1': 8, 'sub-app2': 3 };
 
             // ── parse each project's coverage-summary.json ─────────────────
             function parseCoverage(project) {
@@ -377,10 +377,10 @@ jobs:
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5  # v4
 
       - name: Set up Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020  # v4
         with:
           node-version: 20
           cache: "npm"
@@ -399,7 +399,7 @@ jobs:
           node scripts/verify-telemetry.mjs 2>&1 | tee telemetry-evidence.txt || true
 
       - name: Upload evidence artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02  # v4
         if: always()
         with:
           name: telemetry-evidence

@@ -160,7 +160,7 @@ See [`CONTRIBUTING.md § Dependency Upgrade Policy`](./CONTRIBUTING.md#dependenc
 
 ## Security hygiene controls
 
-The following hygiene controls were added or strengthened on **2026-05-19** as part of a structured security improvement sprint.
+The following hygiene controls were added or strengthened across two security improvement sprints (**2026-05-19** and **2026-05-26**).
 
 ### Fix 1 — `.gitignore` secret patterns
 
@@ -195,9 +195,63 @@ To verify all workflows have an explicit permissions block:
 node scripts/security-check.mjs
 ```
 
+### Fix 4 — SHA-pinned GitHub Actions (supply-chain attack prevention) — 2026-05-26
+
+**Gap**: All five workflows used floating tag refs (`actions/checkout@v4`, `actions/setup-node@v4`, etc.). A compromised or hijacked action tag can transparently replace legitimate code with malicious code that runs in every CI job, exfiltrates secrets, or injects malicious build artefacts.
+
+**Change**: Replaced every `@vN` tag ref with the exact 40-character commit SHA that tag currently resolves to. Human-readable `# v4` comments are retained for readability.
+
+| Action | SHA pinned | Tag |
+|---|---|---|
+| `actions/checkout` | `34e114876b0b11c390a56381ad16ebd13914f8d5` | v4 |
+| `actions/setup-node` | `49933ea5288caeca8642d1e84afbd3f7d6820020` | v4 |
+| `actions/upload-artifact` | `ea165f8d65b6e75b540449e92b4886f43607fa02` | v4 |
+| `actions/download-artifact` | `d3f86a106a0bac45b974a628896c90dbdf5c8093` | v4 |
+
+**Effect**: Any attempt to silently re-point a tag to a malicious commit will no longer affect these workflows. The SHA is immutable on GitHub.
+
+**When to update**: When a new action release is available, look up the new commit SHA with `gh api repos/actions/<name>/git/ref/tags/<tag> --jq '.object.sha'`, then update both the workflow ref and the comment.
+
+**Scripted patch** — to re-pin all four actions to a new SHA in one pass:
+
+```bash
+# Usage: UPDATE_SHA=<new-sha> UPDATE_TAG=v4 bash scripts/pin-actions.sh
+# Or run manually for each action:
+for f in .github/workflows/*.yml; do
+  sed -i 's|actions/checkout@<old-sha>|actions/checkout@<new-sha>  # v4|g' "$f"
+  # repeat for other actions
+done
+node scripts/security-check.mjs   # verify SHA check passes
+```
+
+---
+
+### Fix 5 — `CODEOWNERS` for security-sensitive files — 2026-05-26
+
+**Gap**: No code ownership rules existed. Any contributor could modify `audit-ci.json`, workflow files, or `SECURITY.md` without a designated security review, even on repos with branch protection.
+
+**Change**: Added `.github/CODEOWNERS` mapping the following paths to require owner approval before merge:
+
+| Path | Rationale |
+|---|---|
+| `SECURITY.md` | Security policy changes must be intentional |
+| `audit-ci.json` | Adding to the allowlist or lowering thresholds needs review |
+| `.github/workflows/` | Compromised workflows can exfiltrate `GITHUB_TOKEN` and secrets |
+| `scripts/security-check.mjs` | Weakening the check script bypasses all hygiene gates |
+| `package.json` + `package-lock.json` | Dependency changes introduce supply-chain risk |
+| `.husky/` | Pre-commit hooks run arbitrary code on every developer's machine |
+
+**Effect**: GitHub enforces owner approval as a required PR review for any change touching these paths (when branch protection + "Require CODEOWNERS review" is enabled on `main`).
+
+To enable CODEOWNERS enforcement:
+1. Go to **Settings → Branches → Branch protection rules** for `main`
+2. Enable **"Require a pull request before merging"** and **"Require review from Code Owners"**
+
+---
+
 ### Repeatable hygiene check script
 
-`scripts/security-check.mjs` is a repeatable Node.js scanner that verifies all three hygiene controls above plus the live `audit-ci` gate.
+`scripts/security-check.mjs` is a repeatable Node.js scanner that verifies all hygiene controls and exits non-zero if any fail.
 
 ```bash
 node scripts/security-check.mjs   # exits 0 if all checks pass, 1 otherwise
@@ -210,17 +264,22 @@ node scripts/security-check.mjs   # exits 0 if all checks pass, 1 otherwise
 | 1 | `audit-ci.json` threshold | `high: true`, `critical: true`, every allowlisted advisory has a rationale entry |
 | 2 | `.gitignore` secret patterns | `.env`, `*.pem`, `*.key`, `*.p12`, `*.pfx` all present |
 | 3 | Workflow `permissions:` blocks | Every `.github/workflows/*.yml` file contains a top-level `permissions:` block |
-| 4 | Live `audit-ci` gate | `npx audit-ci --config audit-ci.json` exits 0 |
+| 4 | **GitHub Actions SHA pinning** _(new — 2026-05-26)_ | Every `uses:` line references a 40-char commit SHA, not a floating tag |
+| 5 | Live `audit-ci` gate | `npx audit-ci --config audit-ci.json` exits 0 |
 
 The script can be added to a `pre-push` hook or run in CI as an additional hygiene gate.
+
+---
 
 ### Rollback guidance
 
 | Fix | Revert command |
 |---|---|
-| `.gitignore` patterns | `git checkout HEAD~1 -- .gitignore` |
-| `audit-ci.json` threshold | `git checkout HEAD~1 -- audit-ci.json` |
-| Workflow permissions | `git checkout HEAD~1 -- .github/workflows/contract-tests.yml .github/workflows/dependency-scan.yml .github/workflows/lint.yml .github/workflows/update-architecture.yml .github/workflows/validate-docs.yml` |
+| `.gitignore` patterns | `git revert <commit> --no-edit` or `git checkout <prev-sha> -- .gitignore` |
+| `audit-ci.json` threshold | `git checkout <prev-sha> -- audit-ci.json` |
+| Workflow permissions | `git checkout <prev-sha> -- .github/workflows/*.yml` |
+| **SHA-pinned actions** _(new)_ | `git revert <commit> --no-edit` — reverts all 5 workflows to tag refs in one command |
+| **CODEOWNERS** _(new)_ | `git rm .github/CODEOWNERS && git commit -m "revert: remove CODEOWNERS"` |
 
-No functional code was changed; rollback cannot break tests or the build.
+No functional code is changed by any of these hygiene fixes; rollback cannot break tests or the build.
 
