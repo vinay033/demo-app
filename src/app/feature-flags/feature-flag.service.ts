@@ -19,6 +19,24 @@ export interface FeatureFlags {
   enableReduxMonitor: boolean;
   /** Gate the mfeTimed() load-timing wrapper in app-routing. */
   enableMfeTiming: boolean;
+  /**
+   * Gate the periodic (interval-based) flush in TelemetryFlushService.
+   *
+   * When ON:  TelemetryFlushService flushes the ring buffer every
+   *           TELEMETRY_FLUSH_INTERVAL_MS (default 30 s) in addition to
+   *           the existing pagehide / visibilitychange triggers. Each
+   *           periodic flush emits a `telemetry.flush.periodic` counter.
+   *
+   * When OFF: Only pagehide / visibilitychange trigger a flush (original
+   *           behaviour). No setInterval is scheduled — zero overhead.
+   *
+   * Safety: default OFF in production. Enable only after validating that
+   * the collector endpoint handles the increased request frequency.
+   *
+   * Rollback: set `enablePeriodicFlush: false` in environment.prod.ts
+   *           and redeploy — the interval is never scheduled.
+   */
+  enablePeriodicFlush: boolean;
 }
 
 // ── Testing seam ─────────────────────────────────────────────────────────────

@@ -31,6 +31,29 @@ Every flag that currently exists in the codebase:
 | `enableTelemetry` | boolean | `true` | `false` | `TelemetryErrorHandler`, `RouterTelemetryService`, `WebVitalsService` |
 | `enableReduxMonitor` | boolean | `true` | `false` | `dispatchMonitorEnhancer` in `projects/sub-app1/store/store.ts` |
 | `enableMfeTiming` | boolean | `true` | `false` | `mfeTimed()` in `src/app/app-routing.module.ts` _(future)_ |
+| `enablePeriodicFlush` | boolean | `true` | `false` | `TelemetryFlushService` constructor — controls `setInterval` setup |
+
+### `enablePeriodicFlush` — safety details
+
+**Purpose**: gates the higher-risk periodic-beacon behaviour in `TelemetryFlushService`.
+When ON, a `setInterval` fires every `TELEMETRY_FLUSH_INTERVAL_MS` (default 30 s) and
+calls `sendBeacon()` to the configured collector. When OFF, only `pagehide` and
+`visibilitychange` trigger a flush (the original, safe baseline).
+
+**Why it needs a flag**: periodic `sendBeacon` calls increase per-tab network traffic,
+require the collector endpoint to handle higher request rates, and the `setInterval`
+must be cleared correctly on service destroy to avoid leaks. The flag enables a
+safe graduated rollout: validate at full load in staging before enabling in prod.
+
+**Rollback**: set `enablePeriodicFlush: false` in `src/environments/environment.prod.ts`
+and redeploy. No code changes required — the `setInterval` is never scheduled when the
+flag is off. Interval is also cleared in `ngOnDestroy` so hot-reloads are clean.
+
+**Telemetry hook**: each periodic flush emits a `telemetry.flush.periodic` counter with
+a `buffered` tag. Query this metric to observe flush cadence and buffer drain rate.
+
+**Test override**: inject `{ provide: TELEMETRY_FLUSH_INTERVAL_MS, useValue: 100 }`
+(or any ms value) in tests to avoid waiting 30 s in `fakeAsync` specs.
 
 **Source of truth:** [`src/app/feature-flags/feature-flag.service.ts`](../src/app/feature-flags/feature-flag.service.ts) — the `FeatureFlags` interface is the canonical type; the environments implement it.
 
