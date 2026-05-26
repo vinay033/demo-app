@@ -133,7 +133,8 @@ describe('TelemetryService', () => {
       service.counter('ev2');
       service.flush('https://x');
 
-      expect(capturedBlob!.type).toBe('application/x-ndjson');
+      expect(capturedBlob).toBeDefined();
+      expect(capturedBlob?.type).toBe('application/x-ndjson');
     });
 
     it('splits a large buffer into multiple chunks and sends each separately', () => {

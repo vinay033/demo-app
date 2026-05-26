@@ -59,6 +59,44 @@ module.exports = [
     },
   },
 
+  // ── Tier 1.5: elevated rules for all src/app/ ───────────────────────────
+  //
+  // Rationale: expands the high-signal subset of Tier 2 rules to the entire
+  // src/app/ tree so correctness patterns are enforced workspace-wide, not
+  // just in the telemetry module.  Rules are 'warn' here (not 'error') to
+  // allow a gradual adoption path for the feature-flags and store-listener
+  // modules.  Promote to 'error' once all existing violations are resolved.
+  //
+  // Findings baseline (2026-05-26): 14 findings — see docs/static-analysis.md
+  {
+    files: ['src/app/**/*.ts'],
+    languageOptions: {
+      parser: tsParser,
+      parserOptions: {
+        project: './tsconfig.eslint.json',
+        tsconfigRootDir: __dirname,
+      },
+    },
+    plugins: {
+      '@typescript-eslint': tsPlugin,
+    },
+    rules: {
+      // Fields only ever assigned in the constructor should be immutable.
+      // Prevents accidental mutation of service state post-initialisation.
+      '@typescript-eslint/prefer-readonly': 'warn',
+
+      // ?? / || / && short-circuits where the left side can never be nullish
+      // are dead code — often left behind after a type refactor.
+      '@typescript-eslint/no-unnecessary-condition': ['warn', {
+        allowConstantLoopConditions: true,
+      }],
+
+      // Non-null assertions (!.) bypass the type system; require explicit
+      // handling (optional chaining, ?? fallback, or narrowing check).
+      '@typescript-eslint/no-non-null-assertion': 'warn',
+    },
+  },
+
   // ── Tier 2: STRICT rules for the telemetry module ───────────────────────
   //
   // Rationale: telemetry/ is the most safety-critical module in this workspace.
@@ -118,6 +156,10 @@ module.exports = [
       '@typescript-eslint/no-unnecessary-condition': ['error', {
         allowConstantLoopConditions: true,
       }],
+
+      // Promote no-non-null-assertion to error in the safety-critical module.
+      // Use optional chaining, ?? fallbacks, or explicit null guards instead.
+      '@typescript-eslint/no-non-null-assertion': 'error',
     },
   },
 ];

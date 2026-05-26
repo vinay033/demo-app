@@ -44,11 +44,10 @@ describe('FeatureFlagService', () => {
   });
 
   it('snapshot is a copy — mutating it does not affect the service', () => {
-    // Cast to any so we can mutate the returned copy without TypeScript
-    // complaining about readonly fields. Verifies the snapshot is a defensive
-    // copy, not a live reference to the internal flags object.
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const snap1 = service.snapshot() as any;
+    // Spread into a mutable plain object to verify the snapshot is a defensive
+    // copy (not a live reference to the internal flags). No `as any` needed —
+    // the spread creates a new writable object so TypeScript allows mutation.
+    const snap1 = { ...service.snapshot() };
     snap1.enableTelemetry = !snap1.enableTelemetry;
     const snap2 = service.snapshot();
     expect(snap2.enableTelemetry).toBe(env.environment.featureFlags.enableTelemetry);

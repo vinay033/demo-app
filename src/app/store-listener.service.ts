@@ -5,7 +5,8 @@ import { store } from '../../projects/sub-app1/store';
 @Injectable({ providedIn: 'root' })
 export class StoreListenerService implements OnDestroy {
   private readonly store: Store = store;
-  private unsubscribe: Unsubscribe;
+  // readonly: assigned once in the constructor and never reassigned.
+  private readonly unsubscribe: Unsubscribe;
 
   constructor() {
     this.unsubscribe = this.store.subscribe(() => {
