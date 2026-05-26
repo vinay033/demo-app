@@ -4,6 +4,13 @@ const featureFlags: FeatureFlags = {
   enableTelemetry: false,
   enableReduxMonitor: false,
   enableMfeTiming: false,
+  /**
+   * Periodic flush — OFF in production (safe default).
+   * Enable only after validating that the collector endpoint handles the
+   * increased beacon frequency (every 30 s per active tab).
+   * Rollback: set false here and redeploy — no code changes required.
+   */
+  enablePeriodicFlush: false,
 };
 
 export const environment = {

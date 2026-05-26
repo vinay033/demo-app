@@ -11,6 +11,12 @@ const featureFlags: FeatureFlags = {
   enableReduxMonitor: true,
   /** Gate the mfeTimed() load-timing wrapper in app-routing. */
   enableMfeTiming: true,
+  /**
+   * Periodic flush — ON in dev so engineers can observe the 30 s interval
+   * in the console without deploying to a real environment.
+   * Default: true (dev), false (prod) — change with caution.
+   */
+  enablePeriodicFlush: true,
 };
 
 export const environment = {

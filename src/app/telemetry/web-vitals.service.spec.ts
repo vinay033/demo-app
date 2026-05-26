@@ -1,7 +1,7 @@
 import { TestBed } from '@angular/core/testing';
 import { WebVitalsService } from './web-vitals.service';
 import { TelemetryService } from './telemetry.service';
-import { _setFlagOverridesForTesting } from '../feature-flags/feature-flag.service';
+import { _setFlagOverridesForTesting, isFlagEnabled } from '../feature-flags/feature-flag.service';
 import { LOG_PREFIX } from './resilience';
 
 describe('WebVitalsService', () => {
@@ -92,12 +92,10 @@ describe('WebVitalsService', () => {
 
     it('does not register any web-vitals observers — buffer stays empty', () => {
       _setFlagOverridesForTesting({ enableTelemetry: false });
-      // Create a fresh TelemetryService for isolation
-      const freshTelemetry = new (require('./telemetry.service').TelemetryService)();
-      // Directly test the guard: isFlagEnabled should return false
-      const { isFlagEnabled } = require('../feature-flags/feature-flag.service');
+      // Verify flag guard returns false
       expect(isFlagEnabled('enableTelemetry')).toBeFalse();
-      // No events should have been emitted
+      // A fresh TelemetryService should have no events (no metrics emitted)
+      const freshTelemetry = new TelemetryService();
       expect(freshTelemetry.events.length).toBe(0);
     });
   });

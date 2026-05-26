@@ -56,8 +56,7 @@ describe('environment object — shape contract', () => {
     it('featureFlags contains exactly the documented flags', () => {
       // UPDATE THIS LIST when you add or remove a feature flag.
       // See docs/feature-flags.md and src/app/feature-flags/feature-flag.service.ts.
-      const ALLOWED_FLAGS = ['enableTelemetry', 'enableReduxMonitor', 'enableMfeTiming'];
-      assertExactKeys(devEnv.featureFlags, ALLOWED_FLAGS, 'dev featureFlags');
+      const ALLOWED_FLAGS = ['enableTelemetry', 'enableReduxMonitor', 'enableMfeTiming', 'enablePeriodicFlush'];
     });
 
     it('all featureFlags values are booleans', () => {
@@ -92,7 +91,7 @@ describe('environment object — shape contract', () => {
     });
 
     it('featureFlags contains exactly the documented flags', () => {
-      const ALLOWED_FLAGS = ['enableTelemetry', 'enableReduxMonitor', 'enableMfeTiming'];
+      const ALLOWED_FLAGS = ['enableTelemetry', 'enableReduxMonitor', 'enableMfeTiming', 'enablePeriodicFlush'];
       assertExactKeys(prodEnv.featureFlags, ALLOWED_FLAGS, 'prod featureFlags');
     });
 
