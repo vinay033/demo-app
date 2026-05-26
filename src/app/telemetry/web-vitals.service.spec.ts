@@ -1,7 +1,7 @@
 import { TestBed } from '@angular/core/testing';
 import { WebVitalsService } from './web-vitals.service';
 import { TelemetryService } from './telemetry.service';
-import { _setFlagOverridesForTesting } from '../feature-flags/feature-flag.service';
+import { _setFlagOverridesForTesting, isFlagEnabled } from '../feature-flags/feature-flag.service';
 import { LOG_PREFIX } from './resilience';
 
 describe('WebVitalsService', () => {
@@ -43,9 +43,12 @@ describe('WebVitalsService', () => {
 
     const ev = telemetry.events.find(e => e.name === 'web_vitals.lcp');
     expect(ev).toBeTruthy();
-    expect(ev!.type).toBe('timing');
-    expect(ev!.value).toBe(1200);
-    expect(ev!.tags?.['rating']).toBe('good');
+    // Use optional chaining: if ev is undefined, these assertions produce
+    // `undefined` which fails the expect — the toBeTruthy() above gives the
+    // diagnostic. No non-null assertion (!) needed.
+    expect(ev?.type).toBe('timing');
+    expect(ev?.value).toBe(1200);
+    expect(ev?.tags?.['rating']).toBe('good');
   });
 
   it('pipes a simulated CLS metric as a gauge (score × 1000)', () => {
@@ -55,8 +58,8 @@ describe('WebVitalsService', () => {
 
     const ev = telemetry.events.find(e => e.name === 'web_vitals.cls');
     expect(ev).toBeTruthy();
-    expect(ev!.type).toBe('gauge');
-    expect(ev!.value).toBe(50);
+    expect(ev?.type).toBe('gauge');
+    expect(ev?.value).toBe(50);
   });
 
   it('pipes a simulated INP metric with needs-improvement rating', () => {
@@ -65,7 +68,7 @@ describe('WebVitalsService', () => {
     telemetry.timing('web_vitals.inp', 250, { rating: 'needs-improvement', navigation_type: 'navigate' });
 
     const ev = telemetry.events.find(e => e.name === 'web_vitals.inp');
-    expect(ev!.tags?.['rating']).toBe('needs-improvement');
+    expect(ev?.tags?.['rating']).toBe('needs-improvement');
   });
 
   // ── Flag OFF ──────────────────────────────────────────────────────────────
@@ -92,12 +95,10 @@ describe('WebVitalsService', () => {
 
     it('does not register any web-vitals observers — buffer stays empty', () => {
       _setFlagOverridesForTesting({ enableTelemetry: false });
-      // Create a fresh TelemetryService for isolation
-      const freshTelemetry = new (require('./telemetry.service').TelemetryService)();
-      // Directly test the guard: isFlagEnabled should return false
-      const { isFlagEnabled } = require('../feature-flags/feature-flag.service');
+      // Verify flag guard returns false
       expect(isFlagEnabled('enableTelemetry')).toBeFalse();
-      // No events should have been emitted
+      // A fresh TelemetryService should have no events
+      const freshTelemetry = new TelemetryService();
       expect(freshTelemetry.events.length).toBe(0);
     });
   });

@@ -67,8 +67,18 @@ export class FeatureFlagService {
    */
   isEnabled(flag: keyof FeatureFlags): boolean {
     if (_testOverrides !== null && flag in _testOverrides) {
-      return _testOverrides[flag]!;
+      // TypeScript 4.x does not narrow Partial<T>[keyof T] after an `in` check,
+      // so the value remains `boolean | undefined`. The `?? false` handles the
+      // theoretical undefined case defensively; at runtime the value is always
+      // a boolean because _setFlagOverridesForTesting only accepts FeatureFlags values.
+      return _testOverrides[flag] ?? false;
     }
+    // this.flags is FeatureFlags (non-partial). TypeScript types all values as
+    // boolean, but callers can pass stale/removed keys at runtime (e.g. a call-site
+    // not yet updated after a flag was deleted). The ?? false preserves the documented
+    // "unknown keys return false" contract. no-unnecessary-condition is suppressed here
+    // because the safety value is intentional defensive coding, not dead code.
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- unknown-key safety contract (see JSDoc)
     return this.flags[flag] ?? false;
   }
 
@@ -87,7 +97,13 @@ export class FeatureFlagService {
  */
 export function isFlagEnabled(flag: keyof FeatureFlags): boolean {
   if (_testOverrides !== null && flag in _testOverrides) {
-    return _testOverrides[flag]!;
+    // See comment in isEnabled(): TypeScript 4 does not narrow Partial<T>[keyof T]
+    // after `in`, so ?? false is a defensive fallback; value is always boolean at runtime.
+    return _testOverrides[flag] ?? false;
   }
+  // environment.featureFlags is FeatureFlags (non-partial). See isEnabled() comment:
+  // the ?? false is an intentional safety net for stale call-sites that pass removed
+  // flag keys at runtime. Suppressed no-unnecessary-condition for the same reason.
+  // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- unknown-key safety contract (see JSDoc)
   return environment.featureFlags[flag] ?? false;
 }
