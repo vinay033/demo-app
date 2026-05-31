@@ -132,7 +132,7 @@ describe('TelemetryFlushService', () => {
 
     expect(console.log).toHaveBeenCalledWith(
       LOG_PREFIX,
-      'flush triggered — 0 event(s) in buffer',
+      'flush triggered — buffer empty, nothing to send',
     );
   });
 });

@@ -126,16 +126,42 @@ simulateNavigation('/home', 312);
 simulateNavigation('/products', 87);
 simulateNavigation('/checkout', 1_450);
 ok('3 navigation timings recorded');
+note('Navigation lifecycle log format: [telemetry] navigation success — /home (312ms)');
+note('Error navigation:               [telemetry] navigation error — /bad-route (45ms)');
+note('Cancelled navigation:           [telemetry] navigation cancelled — /guarded (12ms)');
 
 // ═════════════════════════════════════════════════════════════════════════════
 section('3 · Redux dispatch rate  (dispatchMonitorEnhancer)');
 // ═════════════════════════════════════════════════════════════════════════════
+// Simulates the [redux] prefix logs emitted by dispatchMonitorEnhancer in store.ts.
+// These are separate from the [telemetry] ring-buffer events.
 function simulateDispatch(actionType) {
   telemetry.counter('redux.dispatch', 1, { action: actionType });
 }
 
 ['SET_ITEMS', 'SET_ITEMS', 'CLEAR_ITEMS', 'SET_ITEMS'].forEach(simulateDispatch);
-ok('4 dispatch events recorded');
+ok('4 redux.dispatch counter events recorded (dispatchMonitorEnhancer)');
+
+// ═════════════════════════════════════════════════════════════════════════════
+section('3b · Redux dispatch count gauge  (StoreListenerService)');
+// ═════════════════════════════════════════════════════════════════════════════
+// StoreListenerService subscribes to the Redux store and emits a running
+// total as a gauge on every dispatch (enableReduxMonitor flag must be ON).
+// Simulates: this.telemetry.gauge('redux.dispatch_count', this.dispatchCount)
+let dispatchCount = 0;
+function simulateStoreDispatch() {
+  dispatchCount++;
+  telemetry.gauge('redux.dispatch_count', dispatchCount);
+}
+
+simulateStoreDispatch(); // action 1
+simulateStoreDispatch(); // action 2
+simulateStoreDispatch(); // action 3
+const gaugeEvents = telemetry.events.filter(e => e.name === 'redux.dispatch_count');
+const finalCount = gaugeEvents[gaugeEvents.length - 1]?.value ?? 0;
+ok(`${gaugeEvents.length} redux.dispatch_count gauge events — running total now ${finalCount} (StoreListenerService)`);
+note('Init log when enableReduxMonitor is ON:  [telemetry] redux store monitor initialised — dispatch count tracking active');
+note('Init log when enableReduxMonitor is OFF: [telemetry] redux monitor disabled — dispatch count not tracked');
 
 // ═════════════════════════════════════════════════════════════════════════════
 section('4 · Web Vitals  (WebVitalsService)');
