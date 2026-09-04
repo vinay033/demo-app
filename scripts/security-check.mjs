@@ -123,12 +123,35 @@ for (const file of workflowFiles()) {
   }
 }
 
-// ── Check 4: live audit-ci gate ───────────────────────────────────────────────
+// ── Check 4: GitHub Actions SHA pinning ──────────────────────────────────────
+//
+// Tag-based refs (e.g. @v4) can be silently re-pointed to malicious commits.
+// SHA-pinned refs (@<40-char-hex>) are immutable and prevent supply-chain attacks.
 
-section('Check 4: Live audit-ci gate (npx audit-ci)');
+section('Check 4: GitHub Actions SHA pinning');
+
+const SHA_RE = /uses:\s+\S+@([0-9a-f]{40})/g;
+const TAG_RE = /uses:\s+(\S+@v\d[\w.\-]*)/g;
+
+for (const file of workflowFiles()) {
+  const content = readText(join('.github', 'workflows', file));
+  const tagMatches = [...content.matchAll(TAG_RE)].map(m => m[1]);
+  if (tagMatches.length === 0) {
+    pass(`${file}: all action refs are SHA-pinned`);
+  } else {
+    for (const ref of tagMatches) {
+      fail(`${file}: tag-pinned ref: ${ref}  — pin to a commit SHA instead`);
+      info(`Fix: replace with the full 40-char commit SHA (e.g. uses: ${ref.split('@')[0]}@<sha>  # ${ref.split('@')[1]})`);
+    }
+  }
+}
+
+// ── Check 5: live audit-ci gate ───────────────────────────────────────────────
+
+section('Check 5: Live audit-ci gate (npx audit-ci)');
 
 try {
-  execSync('npx audit-ci --config audit-ci.json', { cwd: ROOT, stdio: 'pipe' });
+  execSync('npx audit-ci --config audit-ci.json', { cwd: ROOT, stdio: 'pipe', timeout: 60_000 });
   pass('audit-ci gate passed — no unlisted advisories at or above configured threshold');
 } catch (e) {
   fail('audit-ci gate FAILED — unlisted advisory detected');
